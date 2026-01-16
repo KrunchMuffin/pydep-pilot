@@ -211,7 +211,7 @@
 	},
 	"dependencies": {
 		"@vscode/codicons": "^0.0.44",
-		"axios": "^0.21.1",
+		"axios": "^0.30.2",
 		"reflect-metadata": "^0.1.13",
 		"xml2js": "^0.4.23"
 	}
