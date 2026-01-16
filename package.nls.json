@@ -1,0 +1,15 @@
+{
+    "pydep-pilot.view.title": "PyDepPilot",
+    "pydep-pilot.view.installed": "Installed Packages",
+    "pydep-pilot.view.installed.wait": "Loading packages...",
+    "pydep-pilot.command.addPackage": "Add Python Package",
+    "pydep-pilot.command.refreshPackage": "Refresh Package List",
+    "pydep-pilot.command.removePackage": "Remove Package",
+    "pydep-pilot.command.updatePackage": "Update Package",
+    "pydep-pilot.command.packageDescription": "Open in PyPI",
+    "pydep-pilot.command.copyPackageName": "Copy Package Name",
+    "pydep-pilot.command.installRequirements": "Install packages from requirements.txt",
+    "pydep-pilot.command.searchPackage": "Search PyPI",
+    "pydep-pilot.config.customPypiUrl.description": "Custom PyPI mirror URL (leave empty to use official PyPI)",
+    "pydep-pilot.command.pickPackageVersion": "Select Version"
+}

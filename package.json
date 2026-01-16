@@ -1,0 +1,218 @@
+{
+	"name": "pydep-pilot",
+	"displayName": "PyDepPilot",
+	"description": "Manage Python dependencies with a modern UI. View installed packages, check for updates, bulk update, and more.",
+	"version": "1.0.0",
+	"publisher": "KrunchMuffin",
+	"icon": "media/logo.png",
+	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/KrunchMuffin/pydep-pilot"
+	},
+	"engines": {
+		"vscode": "^1.47.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"keywords": [
+		"python",
+		"pip",
+		"uv",
+		"package manager",
+		"dependencies",
+		"pypi"
+	],
+	"activationEvents": [
+		"onStartupFinished"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"commands": [
+			{
+				"command": "pydep-pilot.removePackage",
+				"title": "%pydep-pilot.command.removePackage%",
+				"description": "Remove Python package"
+			},
+			{
+				"command": "pydep-pilot.packageDescription",
+				"title": "%pydep-pilot.command.packageDescription%",
+				"description": "Show Python package on PyPI"
+			},
+			{
+				"command": "pydep-pilot.addPackage",
+				"title": "%pydep-pilot.command.addPackage%",
+				"icon": "$(add)"
+			},
+			{
+				"command": "pydep-pilot.updatePackage",
+				"title": "%pydep-pilot.command.updatePackage%",
+				"icon": "$(arrow-up)"
+			},
+			{
+				"command": "pydep-pilot.searchPackage",
+				"title": "%pydep-pilot.command.searchPackage%",
+				"icon": "$(search)"
+			},
+			{
+				"command": "pydep-pilot.refreshPackage",
+				"title": "%pydep-pilot.command.refreshPackage%",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "pydep-pilot.copyPackageName",
+				"title": "%pydep-pilot.command.copyPackageName%"
+			},
+			{
+				"command": "pydep-pilot.installRequirements",
+				"title": "%pydep-pilot.command.installRequirements%"
+			},
+			{
+				"command": "pydep-pilot.pickPackageVersion",
+				"title": "%pydep-pilot.command.pickPackageVersion%"
+			},
+			{
+				"command": "pydep-pilot.updateSelected",
+				"title": "Update Selected Packages",
+				"icon": "$(arrow-up)"
+			}
+		],
+		"menus": {
+			"view/title": [
+				{
+					"command": "pydep-pilot.addPackage",
+					"when": "view == pydep-pilot-installed",
+					"group": "navigation@1"
+				},
+				{
+					"command": "pydep-pilot.searchPackage",
+					"when": "view == pydep-pilot-installed",
+					"group": "navigation@2"
+				},
+				{
+					"command": "pydep-pilot.refreshPackage",
+					"when": "view == pydep-pilot-installed",
+					"group": "navigation@3"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "pydep-pilot.removePackage",
+					"when": "view == pydep-pilot-installed"
+				},
+				{
+					"command": "pydep-pilot.pickPackageVersion",
+					"when": "view == pydep-pilot-installed"
+				},
+				{
+					"command": "pydep-pilot.updatePackage",
+					"when": "view == pydep-pilot-installed && viewItem == canUpdate"
+				},
+				{
+					"command": "pydep-pilot.updatePackage",
+					"when": "view == pydep-pilot-installed && viewItem == canUpdate",
+					"group": "inline"
+				},
+				{
+					"command": "pydep-pilot.packageDescription",
+					"when": "view == pydep-pilot-installed"
+				},
+				{
+					"command": "pydep-pilot.copyPackageName",
+					"when": "view == pydep-pilot-installed"
+				}
+			],
+			"editor/title/context": [
+				{
+					"command": "pydep-pilot.installRequirements",
+					"when": "resourceFilename == requirements.txt"
+				}
+			],
+			"editor/context": [
+				{
+					"command": "pydep-pilot.installRequirements",
+					"when": "resourceFilename == requirements.txt"
+				}
+			],
+			"explorer/context": [
+				{
+					"command": "pydep-pilot.installRequirements",
+					"when": "resourceFilename == requirements.txt"
+				}
+			]
+		},
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "pydep-pilot-explorer",
+					"title": "%pydep-pilot.view.title%",
+					"icon": "media/dep.svg"
+				}
+			]
+		},
+		"views": {
+			"pydep-pilot-explorer": [
+				{
+					"id": "pydep-pilot-installed",
+					"name": "%pydep-pilot.view.installed%",
+					"type": "webview"
+				}
+			]
+		},
+		"viewsWelcome": [
+			{
+				"view": "pydep-pilot-installed",
+				"contents": "%pydep-pilot.view.installed.wait%"
+			}
+		],
+		"configuration": {
+			"title": "%pydep-pilot.view.title%",
+			"properties": {
+				"pydep-pilot.customPypiUrl": {
+					"type": "string",
+					"default": "",
+					"description": "%pydep-pilot.config.customPypiUrl.description%"
+				}
+			}
+		}
+	},
+	"extensionDependencies": [
+		"ms-python.python"
+	],
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc && tsc-alias",
+		"watch": "npm-run-all --parallel watch:*",
+		"watch:tsc": "tsc -w",
+		"watch:alias": "tsc-alias -w",
+		"pretest": "npm run compile && npm run lint",
+		"lint": "eslint src --ext ts",
+		"test": "node ./out/test/runTest.js",
+		"pack": "vsce package --no-yarn",
+		"deploy": "vsce publish --no-yarn"
+	},
+	"devDependencies": {
+		"@types/glob": "^7.1.3",
+		"@types/mocha": "^8.2.2",
+		"@types/node": "14.x",
+		"@types/vscode": "^1.47.0",
+		"@types/xml2js": "^0.4.9",
+		"@typescript-eslint/eslint-plugin": "^4.26.0",
+		"@typescript-eslint/parser": "^4.26.0",
+		"eslint": "^7.27.0",
+		"glob": "^7.1.7",
+		"mocha": "^8.4.0",
+		"npm-run-all": "^4.1.5",
+		"tsc-alias": "^1.7.1",
+		"typescript": "^4.3.2",
+		"vsce": "^2.14.0",
+		"vscode-test": "^1.5.2"
+	},
+	"dependencies": {
+		"@vscode/codicons": "^0.0.44",
+		"axios": "^0.21.1",
+		"reflect-metadata": "^0.1.13",
+		"xml2js": "^0.4.23"
+	}
+}
