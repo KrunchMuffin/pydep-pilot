@@ -1,7 +1,7 @@
 [github-shield]: https://img.shields.io/github/stars/KrunchMuffin/pydep-pilot?style=social
 [github-url]: https://github.com/KrunchMuffin/pydep-pilot
-[vscode-shield]: https://img.shields.io/visual-studio-marketplace/i/KrunchMuffin.pydep-pilot?logo=visual-studio-code&style=social
-[vscode-url]: https://marketplace.visualstudio.com/items?itemName=KrunchMuffin.pydep-pilot
+[vscode-shield]: https://img.shields.io/visual-studio-marketplace/i/DABWorx.pydep-pilot?logo=visual-studio-code&style=social
+[vscode-url]: https://marketplace.visualstudio.com/items?itemName=DABWorx.pydep-pilot
 
 [![VSCode Plugin][vscode-shield]][vscode-url]
 [![Github Repo][github-shield]][github-url]
