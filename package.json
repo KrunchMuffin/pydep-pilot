@@ -2,7 +2,7 @@
 	"name": "pydep-pilot",
 	"displayName": "PyDepPilot",
 	"description": "Manage Python dependencies with a modern UI. View installed packages, check for updates, bulk update, and more.",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"publisher": "DABWorx",
 	"icon": "media/pydeppilot-logo-icon.png",
 	"license": "MIT",
