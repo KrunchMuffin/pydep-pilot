@@ -201,6 +201,21 @@ body {
 
 .package-row.selected {
     background-color: var(--vscode-list-activeSelectionBackground);
+    color: var(--vscode-list-activeSelectionForeground);
+}
+
+.package-row.selected .package-name {
+    color: var(--vscode-list-activeSelectionForeground);
+}
+
+.package-row.selected .col-version,
+.package-row.selected .col-latest {
+    color: var(--vscode-list-activeSelectionForeground);
+    opacity: 0.9;
+}
+
+.package-row.selected .status-badge {
+    opacity: 0.9;
 }
 
 .package-row.has-update {

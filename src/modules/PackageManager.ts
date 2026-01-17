@@ -1,10 +1,8 @@
 import { spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 import * as vscode from 'vscode';
 import axios from 'axios';
-import * as xml2js from 'xml2js';
 import * as utils from '@/utils';
 import { createDecorator } from '@/common/ioc/common/instantiation';
 import { IExtensionContext, IOutputChannel } from '@/interface/common';
@@ -18,18 +16,7 @@ interface PackageInfo {
 
 export type PackageVersionInfo = Omit<PackageInfo, 'version'> & Required<Pick<PackageInfo, 'version'>>;
 
-type PackagePickItem = vscode.QuickPickItem & PackageVersionInfo;
-
 const PYPI_DEFAULT = 'https://pypi.org/simple';
-
-enum Category {
-    python3 = 'Programming Language :: Python :: 3',
-    education = 'Intended Audience :: Education',
-    stable = 'Development Status :: 5 - Production/Stable',
-    empty = '',
-}
-
-const defaultCategory = encodeURI(Category.stable);
 
 export const necessaryPackage = [
     'pip', 'setuptools', 'wheel'
@@ -41,7 +28,6 @@ export interface IPackageManager {
     addPackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken): Promise<any>;
     updatePackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken): Promise<any>;
     removePackage(pack: string | PackageInfo): Promise<any>;
-    searchFromPyPi(keyword: string, page?: number, cancelToken?: vscode.CancellationToken): Promise<{ list: PackagePickItem[], totalPages: number }>;
     updatePythonPath(path: string): void;
     addPackageFromFile(filePath: string, cancelToken?: vscode.CancellationToken): Promise<any>;
     getPackageVersionList(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken): Promise<string[]>;
@@ -204,7 +190,6 @@ export class PackageManager implements IPackageManager {
         return out;
     }
 
-    // eslint-disable-next-line @typescript-eslint/naming-convention
     public _test_createPackageInfo = this.createPackageInfo;
 
     private tryParsePipListJson(packages: string) {
@@ -325,63 +310,6 @@ export class PackageManager implements IPackageManager {
         await this.pip(['uninstall', name, '-y']);
     }
 
-    public async searchFromPyPi(keyword: string, page = 1, cancelToken?: vscode.CancellationToken) {
-        const axiosCancelToken = utils.createAxiosCancelToken(cancelToken);
-        const resp = await axios({
-            method: 'GET',
-            cancelToken: axiosCancelToken.token,
-            url: `https://pypi.org/search/?q=${keyword}&page=${page}${keyword ? '' : `&c=${defaultCategory}`
-                }`,
-        });
-        const [resultXml] =
-            RegExp(
-                '<ul class="unstyled" aria-label="Search results">[\\s\\S]*?</ul>'
-            ).exec(resp.data) || [];
-        if (!resultXml) {return Promise.reject({ type: 'no result' });}
-        const [paginationXml] =
-            RegExp(
-                '<div class="button-group button-group--pagination">[\\s\\S]*?</div>'
-            ).exec(resp.data) || [];
-        const result = await xml2js.parseStringPromise(resultXml, {
-            explicitArray: false,
-        });
-
-        const list: PackagePickItem[] = [];
-        result.ul.li.forEach((item: any) => {
-            const data = {
-                name: item.a.h3.span[0]._,
-                version: item.a.h3.span[1]._,
-                updateTime: item.a.h3.span[2].time.$.datetime,
-                describe: item.a.p._,
-            };
-            list.push({
-                name: data.name,
-                version: data.version,
-                alwaysShow: true,
-                label: data.name,
-                description: `${data.version}`,
-                detail: data.describe
-            });
-        });
-
-        let totalPages = 1;
-
-        if (paginationXml) {
-            const pagination = await xml2js.parseStringPromise(paginationXml, {
-                explicitArray: false,
-            });
-            totalPages = Number(pagination.div.a[pagination.div.a.length - 2]._) || 1;
-            if (totalPages < page) {
-                totalPages = page;
-            }
-        }
-
-        return {
-            list,
-            totalPages,
-        };
-    }
-
     public async getPackageVersionList(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken) {
         const info = this.createPackageInfo(pack);
 
@@ -414,7 +342,9 @@ export class PackageManager implements IPackageManager {
                     const partsB = b.split('.').map(p => parseInt(p.replace(/[^0-9]/g, '')) || 0);
                     for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
                         const diff = (partsB[i] || 0) - (partsA[i] || 0);
-                        if (diff !== 0) return diff;
+                        if (diff !== 0) {
+                            return diff;
+                        }
                     }
                     return 0;
                 });

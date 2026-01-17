@@ -3,8 +3,8 @@ import axios from 'axios';
 
 export function createAxiosCancelToken(cancelToken?: vscode.CancellationToken){
     const axiosCancelToken = axios.CancelToken.source();
-    cancelToken?.onCancellationRequested(()=>{
+    cancelToken?.onCancellationRequested(() => {
         axiosCancelToken.cancel();
-    })
+    });
     return axiosCancelToken;
 }

@@ -6,7 +6,7 @@
 import { SyncDescriptor } from './descriptors';
 import { ServiceIdentifier, BrandedService } from './instantiation';
 
-const _registry: [ServiceIdentifier<any>, SyncDescriptor<any>][] = [];
+const registry: [ServiceIdentifier<any>, SyncDescriptor<any>][] = [];
 
 export function registerSingleton<T, Services extends BrandedService[]>(id: ServiceIdentifier<T>, ctor: new (...services: Services) => T, supportsDelayedInstantiation?: boolean): void;
 export function registerSingleton<T, Services extends BrandedService[]>(id: ServiceIdentifier<T>, descriptor: SyncDescriptor<any>): void;
@@ -15,9 +15,9 @@ export function registerSingleton<T, Services extends BrandedService[]>(id: Serv
 		ctorOrDescriptor = new SyncDescriptor<T>(ctorOrDescriptor as new (...args: any[]) => T, [], supportsDelayedInstantiation);
 	}
 
-	_registry.push([id, ctorOrDescriptor]);
+	registry.push([id, ctorOrDescriptor]);
 }
 
 export function getSingletonServiceDescriptors(): [ServiceIdentifier<any>, SyncDescriptor<any>][] {
-	return _registry;
+	return registry;
 }

@@ -1,13 +1,56 @@
-.vscode/**
-.vscode-test/**
+# Source files
+src/**
+**/*.ts
+
+# Build config and tools
+**/*.map
+**/tsconfig.json
+**/tsc-alias.json
+esbuild.js
+
+# Old tsc output (esbuild bundles everything into one file)
+out/common/**
+out/interface/**
+out/modules/**
+out/utils/**
 out/test/**
 
-src/**
+# Test files
+.vscode-test/**
+test/**
+
+# Development config
+.vscode/**
+.github/**
 .gitignore
 .yarnrc
 .yarn/**
-vsc-extension-quickstart.md
-**/tsconfig.json
+.npmrc
+.editorconfig
 **/.eslintrc.json
-**/*.map
-**/*.ts
+**/eslint.config.*
+
+# Documentation (keep README.md and LICENSE for marketplace)
+doc/**
+docs/**
+vsc-extension-quickstart.md
+CHANGELOG.md
+CLAUDE.md
+
+# Node modules - everything bundled by esbuild except codicon font
+node_modules/**
+# Only include the codicon font file (loaded dynamically by webview)
+!node_modules/@vscode/codicons/dist/codicon.ttf
+
+# Package manager files
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Claude Code settings
+.claude/**
+
+# Misc
+.DS_Store
+Thumbs.db
+*.vsix

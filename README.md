@@ -17,7 +17,7 @@ A modern, intuitive Python dependency manager for VS Code. View your installed p
 View all your installed Python packages in a clean, modern webview interface with real-time update checking.
 
 <!-- TODO: Add screenshot of main interface -->
-![Package Dashboard](https://github.com/KrunchMuffin/pydep-pilot/raw/main/doc/img/dashboard.png)
+![Package Dashboard](https://github.com/KrunchMuffin/pydep-pilot/raw/main/doc/img/dashboard.webp)
 
 ### Version Management
 
@@ -26,7 +26,7 @@ View all your installed Python packages in a clean, modern webview interface wit
 - Click any version to pick a specific version to install
 
 <!-- TODO: Add screenshot showing version columns -->
-![Version Display](https://github.com/KrunchMuffin/pydep-pilot/raw/main/doc/img/versions.png)
+![Version Display](https://github.com/KrunchMuffin/pydep-pilot/raw/main/doc/img/versions.webp)
 
 ### Bulk Update
 
@@ -35,12 +35,11 @@ Select multiple packages and update them all at once. No more updating one by on
 <!-- TODO: Add GIF of bulk update in action -->
 ![Bulk Update](https://github.com/KrunchMuffin/pydep-pilot/raw/main/doc/img/bulk-update.gif)
 
-### Search & Install from PyPI
+### Search PyPI
 
-Search the Python Package Index directly from VS Code and install packages with a click.
+Search for packages on PyPI directly from VS Code. The search opens pypi.org in your browser where you can browse results and find the exact package you need.
 
-<!-- TODO: Add screenshot of search -->
-![Search PyPI](https://github.com/KrunchMuffin/pydep-pilot/raw/main/doc/img/search.png)
+> **Note:** VS Code will prompt you to allow opening the external URL the first time. Click "Open" to proceed.
 
 ### Export to requirements.txt
 
@@ -61,7 +60,7 @@ Generate a `requirements.txt` file from your currently installed packages with o
 
 ## Installation
 
-1. Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=KrunchMuffin.pydep-pilot)
+1. Install from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=DABWorx.pydep-pilot)
 2. Or search for "PyDepPilot" in the VS Code Extensions view
 
 ## Usage

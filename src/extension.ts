@@ -5,12 +5,10 @@ import { PackageWebviewProvider } from './modules/PackageWebviewProvider';
 import { PythonExtension } from './modules/PythonExtension';
 import { PackageManager, necessaryPackage } from './modules/PackageManager';
 import { i18n } from './common/i18n/localize';
-import axios from 'axios';
 import * as path from 'path';
 import { ServiceCollection } from './common/ioc/common/serviceCollection';
 import { InstantiationService } from './common/ioc';
 import { IOutputChannel, IExtensionContext } from './interface/common';
-import trace from './common/trace';
 import { CommandTool } from './modules/CommandTool';
 
 export interface ExtensionAPI {
@@ -185,116 +183,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	commandTool.registerCommand('pydep-pilot.searchPackage', async () => {
-		const qPick = vscode.window.createQuickPick();
-
-		let rBusy = 0;
-		let timer: NodeJS.Timeout;
-		let lastCancelToken: vscode.CancellationTokenSource | undefined;
-
-		qPick.busy = true;
-		qPick.show();
-		const defaultTitle = i18n.localize('pydep-pilot.pick.search.defaultTitle', 'Search PyPI');
-		qPick.title = defaultTitle;
-		qPick.placeholder = i18n.localize('pydep-pilot.pick.search.placeholder', 'Enter package name to search');
-
-		const btnTable = {
-			dot: { iconPath: new vscode.ThemeIcon('debug-stackframe-dot') },
-			left: { iconPath: new vscode.ThemeIcon('arrow-left'), tooltip: i18n.localize('pydep-pilot.pick.search.preBtn', 'Previous page') },
-			right: { iconPath: new vscode.ThemeIcon('arrow-right'), tooltip: i18n.localize('pydep-pilot.pick.search.nextBtn', 'Next page') },
-		};
-
-		function clearSteps() {
-			qPick.step = 0;
-			qPick.totalSteps = 0;
-			qPick.buttons = [];
+		const query = await vscode.window.showInputBox({
+			title: i18n.localize('pydep-pilot.pick.search.defaultTitle', 'Search PyPI'),
+			placeHolder: i18n.localize('pydep-pilot.pick.search.placeholder', 'Enter package name to search'),
+		});
+		if (query) {
+			vscode.env.openExternal(vscode.Uri.parse(`https://pypi.org/search/?q=${encodeURIComponent(query)}`));
 		}
-
-		function setStep(step: number, totalSteps?: number) {
-			qPick.step = step;
-			if(totalSteps){
-				qPick.totalSteps = totalSteps;
-			}
-			let preBtn,nextBtn;
-			if(qPick.step === 1){
-				preBtn = btnTable.dot;
-			}else {
-				preBtn = btnTable.left;
-			}
-			if(qPick.step === qPick.totalSteps){
-				nextBtn = btnTable.dot;
-			}else{
-				nextBtn = btnTable.right;
-			}
-			qPick.buttons = [preBtn,nextBtn];
-		}
-
-		async function updateItemList(value: string, page: number, clear = true) {
-			if(lastCancelToken){
-				lastCancelToken.cancel();
-			}
-			const cancelToken = new vscode.CancellationTokenSource();
-			lastCancelToken = cancelToken;
-			rBusy++;
-			qPick.busy = !!rBusy;
-
-			try {
-				if (value) {
-					qPick.title = i18n.localize('pydep-pilot.pick.search.resultTitle', 'Results for %0%', `${value}`);;
-				} else {
-					qPick.title = defaultTitle;
-				}
-				if(clear){
-					clearSteps();
-				}else{
-					setStep(page);
-				}
-				const data = await pip.searchFromPyPi(value, page, cancelToken.token);
-				qPick.items = data.list;
-				setStep(page,data.totalPages);
-				qPick.step = page;
-				qPick.totalSteps = data.totalPages;
-			} catch (err) {
-				if(!axios.isCancel(err)) {
-					qPick.title = i18n.localize('pydep-pilot.pick.search.noResultTitle', 'No results found');
-					qPick.items = [];
-					qPick.step = 0;
-					qPick.totalSteps = 0;
-				}
-			}
-			cancelToken.dispose();
-			rBusy--;
-			qPick.busy = !!rBusy;
-		}
-
-		qPick.onDidChangeValue((value: string) => {
-			clearTimeout(timer);
-			timer = setTimeout(() => {
-				updateItemList(value, 1);
-			}, 300);
-		});
-
-		qPick.onDidChangeSelection((data) => {
-			const item = data[0];
-			qPick.hide();
-			const value = item.label;
-			addPackage(value);
-		});
-
-		qPick.onDidTriggerButton((e) => {
-			if (e === btnTable.left) {
-				updateItemList(qPick.value, (qPick.step || 0) - 1, false);
-			}
-			if (e === btnTable.right) {
-				updateItemList(qPick.value, (qPick.step || 0) + 1, false);
-			}
-		});
-
-		qPick.onDidHide(() => {
-			qPick.dispose();
-			lastCancelToken?.dispose();
-		});
-
-		updateItemList('', 1);
 	});
 
 	commandTool.registerCommand('pydep-pilot.pickPackageVersion', async (name?: string, version?: string) => {

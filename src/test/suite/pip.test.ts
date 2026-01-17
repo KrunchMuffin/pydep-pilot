@@ -1,11 +1,7 @@
 import * as assert from 'assert';
-
-// You can import and use all API from the 'vscode' module
-// as well as import your extension to test it
 import * as vscode from 'vscode';
 import { PackageManager } from '@/modules/PackageManager';
 import { ExtensionAPI } from '@/extension';
-import axios from 'axios';
 
 suite('Extension Pip Test Suite', function () {
 	this.timeout(10000);
@@ -16,7 +12,7 @@ suite('Extension Pip Test Suite', function () {
 		(async () => {
 			await new Promise((resolve) => {
 				const checkPyDepPilot = () => {
-					const pyDepPilot = vscode.extensions.getExtension<ExtensionAPI>('KrunchMuffin.pydep-pilot');
+					const pyDepPilot = vscode.extensions.getExtension<ExtensionAPI>('DABWorx.pydep-pilot');
 					if (pyDepPilot && pyDepPilot.isActive) {
 						pip = pyDepPilot.exports?.pip;
 						resolve(undefined);
@@ -73,28 +69,6 @@ suite('Extension Pip Test Suite', function () {
 			assert.strictEqual(true, JSON.stringify(packageList).includes('pip'));
 		})().then(done).catch(done);
 	});
-
-	this.timeout(20000);
-	test('pip api: search', (done) => {
-		(async () => {
-			const searchResult = await pip.searchFromPyPi('pip');
-			assert.strictEqual(true, searchResult?.list.length > 0);
-			const cancelToken = new vscode.CancellationTokenSource();
-			try {
-				setTimeout(() => {
-					cancelToken.cancel();
-				}, 50);
-				await pip.searchFromPyPi('pip', 1, cancelToken.token);
-				throw new Error("should be cancel");
-			} catch (err) {
-				if(!axios.isCancel(err)){
-					throw err;
-				}
-			}
-			cancelToken.dispose();
-		})().then(done).catch(done);
-	});
-
 
 	suiteTeardown(() => {
 		timers.forEach((timer) => {
