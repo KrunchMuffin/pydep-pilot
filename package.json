@@ -212,7 +212,7 @@
 	},
 	"dependencies": {
 		"@vscode/codicons": "^0.0.44",
-		"axios": "^1.13.2",
+		"axios": "^1.15.0",
 		"reflect-metadata": "^0.2.2"
 	}
 }
