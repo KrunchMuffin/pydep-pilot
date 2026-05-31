@@ -66,9 +66,11 @@ Generate a `requirements.txt` file from your currently installed packages with o
 ## Usage
 
 1. Click the PyDepPilot icon in the Activity Bar (left sidebar)
-2. View your installed packages with their versions
+2. View packages from the current workspace's Python environment
 3. Select packages with checkboxes to bulk update
 4. Use the toolbar buttons to add packages, search PyPI, refresh, or export
+
+PyDepPilot prefers a project-local virtual environment such as `.venv`, `venv`, `.env`, or `env`. If no local environment is found, it uses a workspace-scoped interpreter selected through the Python extension. In folders that do not look like Python projects, PyDepPilot shows that state and lets you explicitly choose the selected global interpreter if you want to inspect global packages.
 
 ## Configuration
 
@@ -76,8 +78,7 @@ Access settings via `File > Preferences > Settings` and search for "PyDepPilot":
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `pydep-pilot.source` | PyPI mirror source | `pypi` |
-| `pydep-pilot.sourceCustom` | Custom mirror URL (overrides source) | `` |
+| `pydep-pilot.customPypiUrl` | Custom PyPI/simple index URL | `` |
 
 ## Roadmap
 

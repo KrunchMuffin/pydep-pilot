@@ -112,6 +112,25 @@ body {
     cursor: not-allowed;
 }
 
+.secondary-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    border: 1px solid var(--vscode-button-secondaryBorder, transparent);
+    background-color: var(--vscode-button-secondaryBackground);
+    color: var(--vscode-button-secondaryForeground);
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: background-color 0.1s;
+}
+
+.secondary-btn:hover {
+    background-color: var(--vscode-button-secondaryHoverBackground);
+}
+
 /* Select All Row */
 .select-all-row {
     padding: 4px 0;
@@ -423,6 +442,14 @@ body {
     padding: 40px;
     color: var(--vscode-descriptionForeground);
     text-align: center;
+    gap: 8px;
+}
+
+.empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
     gap: 8px;
 }
 

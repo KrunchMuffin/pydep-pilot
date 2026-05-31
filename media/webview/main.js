@@ -87,6 +87,13 @@
                 render();
                 break;
 
+            case 'environmentEmpty':
+            case 'noVenv':
+                packages = [];
+                errorMessage = null;
+                showEnvironmentEmptyState(message);
+                break;
+
             case 'progress':
                 // Could show progress indicator in UI
                 break;
@@ -118,6 +125,70 @@
         loadingDiv.appendChild(text);
 
         packageListEl.appendChild(loadingDiv);
+    }
+
+    /**
+     * @param {{message?: string, hint?: string, canUseGlobal?: boolean}} state
+     */
+    function showEnvironmentEmptyState(state) {
+        if (!packageListEl) return;
+        packageListEl.textContent = '';
+
+        const container = document.createElement('div');
+        container.className = 'empty-message';
+
+        const iconSpan = document.createElement('span');
+        iconSpan.className = 'codicon codicon-package';
+        iconSpan.style.fontSize = '32px';
+        iconSpan.style.marginBottom = '12px';
+        iconSpan.style.opacity = '0.6';
+        container.appendChild(iconSpan);
+
+        const msgDiv = document.createElement('div');
+        msgDiv.textContent = state.message || 'No project Python environment found';
+        msgDiv.style.marginBottom = '8px';
+        container.appendChild(msgDiv);
+
+        const hintDiv = document.createElement('div');
+        hintDiv.style.fontSize = '12px';
+        hintDiv.style.opacity = '0.8';
+        hintDiv.style.marginBottom = '16px';
+        hintDiv.textContent = state.hint || 'Create a .venv folder to manage packages for this project';
+        container.appendChild(hintDiv);
+
+        const actions = document.createElement('div');
+        actions.className = 'empty-actions';
+
+        const selectBtn = document.createElement('button');
+        selectBtn.className = 'secondary-btn';
+        selectBtn.textContent = 'Select Interpreter';
+        selectBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'selectPython' });
+        });
+        actions.appendChild(selectBtn);
+
+        if (state.canUseGlobal) {
+            const globalBtn = document.createElement('button');
+            globalBtn.className = 'secondary-btn';
+            globalBtn.textContent = 'Use Global Interpreter';
+            globalBtn.addEventListener('click', () => {
+                vscode.postMessage({ type: 'useGlobalPython' });
+            });
+            actions.appendChild(globalBtn);
+        }
+
+        const createBtn = document.createElement('button');
+        createBtn.className = 'primary-btn';
+        createBtn.textContent = 'Create .venv';
+        createBtn.addEventListener('click', () => {
+            vscode.postMessage({ type: 'createVenv' });
+        });
+        actions.appendChild(createBtn);
+
+        container.appendChild(actions);
+
+        packageListEl.appendChild(container);
+        updateFooter();
     }
 
     function render() {

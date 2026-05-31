@@ -36,6 +36,7 @@ docs/**
 vsc-extension-quickstart.md
 CHANGELOG.md
 CLAUDE.md
+AGENTS.md
 
 # Node modules - everything bundled by esbuild except codicon font
 node_modules/**

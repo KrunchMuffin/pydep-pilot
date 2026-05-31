@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { createDecorator, InstantiationService, ServiceCollection } from '@/common/ioc';
 import { IPackageManager, PackageVersionInfo } from './PackageManager';
+import { IPythonExtension } from './PythonExtension';
 import { IExtensionContext } from '@/interface/common';
 
 export interface IPackageWebviewProvider extends vscode.WebviewViewProvider {
@@ -14,13 +15,23 @@ interface WebviewMessage {
     payload?: any;
 }
 
+interface EnvironmentEmptyState {
+    message: string;
+    hint: string;
+    canUseGlobal: boolean;
+}
+
 export class PackageWebviewProvider implements IPackageWebviewProvider {
     private _view?: vscode.WebviewView;
     private _packages: PackageVersionInfo[] = [];
     private _isLoading: boolean = false;
+    private _hasRequirements: boolean = false;
+    private _emptyState?: EnvironmentEmptyState;
+    private _allowGlobalPython: boolean = false;
 
     constructor(
         @IPackageManager private readonly pip: IPackageManager,
+        @IPythonExtension private readonly pythonExt: IPythonExtension,
         @IExtensionContext private readonly context: IExtensionContext
     ) {}
 
@@ -70,11 +81,13 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
         // Re-send current state to webview after visibility change
         if (this._isLoading) {
             this._postMessage({ type: 'loading', value: true });
-        } else if (this._packages.length > 0) {
+        } else if (this._emptyState) {
+            this._postMessage({ type: 'environmentEmpty', ...this._emptyState });
+        } else {
             this._postMessage({
                 type: 'packages',
                 data: this._packages,
-                hasRequirements: false
+                hasRequirements: this._hasRequirements
             });
         }
     }
@@ -92,66 +105,61 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
         this._postMessage({ type: 'loading', value: true });
 
         try {
+            const workspaceFolder = this._getPreferredWorkspaceFolder();
+            const workspaceUri = workspaceFolder?.uri;
+            const currentPythonPath = this.pythonExt.getPythonPath(workspaceUri, {
+                allowGlobal: this._allowGlobalPython
+            });
+            this._emptyState = undefined;
+
+            if (!currentPythonPath) {
+                this._emptyState = await this._getEnvironmentEmptyState(workspaceFolder);
+                // No project-scoped Python environment found.
+                this._isLoading = false;
+                this._postMessage({ type: 'loading', value: false });
+                this._postMessage({
+                    type: 'environmentEmpty',
+                    ...this._emptyState
+                });
+                return;
+            }
+
+            this.pip.updatePythonPath(currentPythonPath);
+
             // First, get the package list quickly and display it
             this._packages = await this.pip.getPackageList();
-
-            // Check for requirements.txt in workspace if no packages found
-            let hasRequirements = false;
-            if (this._packages.length === 0) {
-                const workspaceFolders = vscode.workspace.workspaceFolders;
-                if (workspaceFolders) {
-                    for (const folder of workspaceFolders) {
-                        const reqFile = vscode.Uri.joinPath(folder.uri, 'requirements.txt');
-                        try {
-                            await vscode.workspace.fs.stat(reqFile);
-                            hasRequirements = true;
-                            break;
-                        } catch {
-                            // File doesn't exist, continue
-                        }
-                    }
-                }
-            }
+            this._hasRequirements = !!(await this._findRequirementsFile(workspaceFolder?.uri));
 
             // Send packages immediately so UI shows them
             this._postMessage({
                 type: 'packages',
                 data: this._packages,
-                hasRequirements
+                hasRequirements: this._hasRequirements
             });
 
             // Mark loading as done for the initial list
             this._isLoading = false;
             this._postMessage({ type: 'loading', value: false });
 
-            // Now check each package individually for updates (progressive)
+            // Now check update metadata once through pip so we respect the configured package index.
             this._postMessage({ type: 'checkingUpdates', value: true });
-
-            // Check packages in parallel batches of 5 for speed
-            const batchSize = 5;
-            for (let i = 0; i < this._packages.length; i += batchSize) {
-                const batch = this._packages.slice(i, i + batchSize);
-                const promises = batch.map(async (pkg) => {
-                    const latestVersion = await this.pip.checkPackageLatestVersion(pkg.name);
-                    if (latestVersion) {
-                        pkg.latestVersion = latestVersion;
-                    }
-                });
-
-                await Promise.all(promises);
-
-                // Send incremental update to UI after each batch
+            try {
+                const updateInfo = await this.pip.getPackageUpdate();
+                this._packages = this.pip.mergePackageListWithUpdate(this._packages, updateInfo);
                 this._postMessage({
                     type: 'packages',
                     data: this._packages,
-                    hasRequirements
+                    hasRequirements: this._hasRequirements
                 });
+            } catch {
+                // Keep the installed package list visible even when update lookup fails.
             }
 
             this._postMessage({ type: 'checkingUpdates', value: false });
         } catch (error: any) {
             const errorMessage = error?.message || String(error);
             const lowerError = errorMessage.toLowerCase();
+            this._emptyState = undefined;
             this._postMessage({
                 type: 'error',
                 message: lowerError.includes('python') || lowerError.includes('pip') || lowerError.includes('interpreter')
@@ -160,6 +168,7 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
             });
             this._isLoading = false;
             this._postMessage({ type: 'loading', value: false });
+            this._postMessage({ type: 'checkingUpdates', value: false });
         }
     }
 
@@ -199,7 +208,18 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
                 break;
 
             case 'selectPython':
+                this._allowGlobalPython = false;
                 vscode.commands.executeCommand('python.setInterpreter');
+                break;
+
+            case 'useGlobalPython':
+                this._allowGlobalPython = true;
+                this.refresh();
+                break;
+
+            case 'createVenv':
+                this._allowGlobalPython = false;
+                await this._createVenv();
                 break;
 
             case 'pickVersion':
@@ -213,10 +233,117 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
         }
     }
 
-    private async _exportRequirements(): Promise<void> {
+    private _getWorkspaceFolders(resource?: vscode.Uri): vscode.WorkspaceFolder[] {
         const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders?.length) {
+            return [];
+        }
 
-        if (!workspaceFolders) {
+        const hasExplicitResource = !!resource;
+        const activeResource = resource || vscode.window.activeTextEditor?.document.uri;
+        const preferredFolder = activeResource
+            ? vscode.workspace.getWorkspaceFolder(activeResource)
+            : undefined;
+
+        if (!preferredFolder) {
+            return hasExplicitResource ? [] : [...workspaceFolders];
+        }
+
+        if (hasExplicitResource) {
+            return [preferredFolder];
+        }
+
+        return [
+            preferredFolder,
+            ...workspaceFolders.filter(folder => folder.uri.toString() !== preferredFolder.uri.toString())
+        ];
+    }
+
+    private _getPreferredWorkspaceFolder(resource?: vscode.Uri): vscode.WorkspaceFolder | undefined {
+        return this._getWorkspaceFolders(resource)[0];
+    }
+
+    private async _getEnvironmentEmptyState(workspaceFolder?: vscode.WorkspaceFolder): Promise<EnvironmentEmptyState> {
+        const canUseGlobal = !!this.pythonExt.getPythonPath(workspaceFolder?.uri, { allowGlobal: true });
+
+        if (!workspaceFolder) {
+            return {
+                message: 'No Python workspace is open.',
+                hint: canUseGlobal
+                    ? 'Open a Python project, select a workspace interpreter, or use the selected global interpreter.'
+                    : 'Open a Python project or select a Python interpreter first.',
+                canUseGlobal
+            };
+        }
+
+        const isPythonProject = await this._looksLikePythonProject(workspaceFolder.uri);
+        if (!isPythonProject) {
+            return {
+                message: `${workspaceFolder.name} does not look like a Python project.`,
+                hint: canUseGlobal
+                    ? 'Open a Python project, or use the selected global interpreter to view global packages.'
+                    : 'Open a Python project or select a Python interpreter first.',
+                canUseGlobal
+            };
+        }
+
+        return {
+            message: `No project Python environment found in ${workspaceFolder.name}.`,
+            hint: canUseGlobal
+                ? 'Create a .venv folder, select a workspace interpreter, or use the selected global interpreter.'
+                : 'Create a .venv folder or select a workspace interpreter.',
+            canUseGlobal
+        };
+    }
+
+    private async _looksLikePythonProject(workspaceUri: vscode.Uri): Promise<boolean> {
+        const markerFiles = [
+            'pyproject.toml',
+            'requirements.txt',
+            'setup.py',
+            'setup.cfg',
+            'Pipfile',
+            'poetry.lock',
+            'uv.lock',
+            'environment.yml',
+            'environment.yaml',
+            '.python-version'
+        ];
+
+        for (const markerFile of markerFiles) {
+            try {
+                await vscode.workspace.fs.stat(vscode.Uri.joinPath(workspaceUri, markerFile));
+                return true;
+            } catch {
+                // Marker does not exist in this folder.
+            }
+        }
+
+        const pythonFiles = await vscode.workspace.findFiles(
+            new vscode.RelativePattern(workspaceUri, '**/*.py'),
+            '{**/.venv/**,**/venv/**,**/.env/**,**/env/**,**/node_modules/**,**/.git/**}',
+            1
+        );
+        return pythonFiles.length > 0;
+    }
+
+    private async _findRequirementsFile(resource?: vscode.Uri): Promise<vscode.Uri | undefined> {
+        for (const folder of this._getWorkspaceFolders(resource)) {
+            const reqFile = vscode.Uri.joinPath(folder.uri, 'requirements.txt');
+            try {
+                await vscode.workspace.fs.stat(reqFile);
+                return reqFile;
+            } catch {
+                // File doesn't exist in this folder, continue.
+            }
+        }
+        return undefined;
+    }
+
+    private async _exportRequirements(): Promise<void> {
+        const workspaceFolder = this._getPreferredWorkspaceFolder();
+
+        if (!workspaceFolder) {
             // No workspace - ask user where to save
             const uri = await vscode.window.showSaveDialog({
                 defaultUri: vscode.Uri.file('requirements.txt'),
@@ -230,7 +357,7 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
         }
 
         // Check if requirements.txt already exists
-        const reqFile = vscode.Uri.joinPath(workspaceFolders[0].uri, 'requirements.txt');
+        const reqFile = vscode.Uri.joinPath(workspaceFolder.uri, 'requirements.txt');
         let fileExists = false;
         try {
             await vscode.workspace.fs.stat(reqFile);
@@ -283,21 +410,38 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
     }
 
     private async _installRequirements(): Promise<void> {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders) {
+        const reqFile = await this._findRequirementsFile();
+        if (!reqFile) {
+            vscode.window.showWarningMessage('No requirements.txt found in the current workspace.');
             return;
         }
 
-        for (const folder of workspaceFolders) {
-            const reqFile = vscode.Uri.joinPath(folder.uri, 'requirements.txt');
-            try {
-                await vscode.workspace.fs.stat(reqFile);
-                vscode.commands.executeCommand('pydep-pilot.installRequirements', reqFile);
-                return;
-            } catch {
-                // File doesn't exist, continue
-            }
+        await vscode.commands.executeCommand('pydep-pilot.installRequirements', reqFile);
+    }
+
+    private async _createVenv(): Promise<void> {
+        const workspaceFolder = this._getPreferredWorkspaceFolder();
+        if (!workspaceFolder) {
+            vscode.window.showErrorMessage('No workspace folder open. Please open a folder first.');
+            return;
         }
+
+        await vscode.window.withProgress({
+            location: vscode.ProgressLocation.Notification,
+            title: 'Creating virtual environment...',
+            cancellable: false
+        }, async () => {
+            const terminal = vscode.window.createTerminal({
+                name: 'PyDepPilot: Create venv',
+                cwd: workspaceFolder.uri
+            });
+            terminal.show();
+            terminal.sendText('python -m venv .venv');
+
+            // Wait a bit for the venv to be created, then refresh
+            await new Promise(resolve => setTimeout(resolve, 5000));
+            this.refresh();
+        });
     }
 
     private async _updatePackages(packages: string[]): Promise<void> {

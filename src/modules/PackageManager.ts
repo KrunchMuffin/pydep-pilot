@@ -25,11 +25,11 @@ export const necessaryPackage = [
 export interface IPackageManager {
     getPackageList(): Promise<PackageVersionInfo[]>;
     getPackageListWithUpdate(): Promise<PackageVersionInfo[]>;
-    addPackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken): Promise<any>;
-    updatePackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken): Promise<any>;
+    addPackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken, cwd?: string): Promise<any>;
+    updatePackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken, cwd?: string): Promise<any>;
     removePackage(pack: string | PackageInfo): Promise<any>;
     updatePythonPath(path: string): void;
-    addPackageFromFile(filePath: string, cancelToken?: vscode.CancellationToken): Promise<any>;
+    addPackageFromFile(filePath: string, cancelToken?: vscode.CancellationToken, cwd?: string): Promise<any>;
     getPackageVersionList(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken): Promise<string[]>;
     getPackageUpdate(): Promise<PackageVersionInfo[]>;
     mergePackageListWithUpdate(packInfo: PackageVersionInfo[], updateInfo: PackageVersionInfo[]): PackageVersionInfo[];
@@ -95,66 +95,90 @@ export class PackageManager implements IPackageManager {
         }
     }
 
-    private execute(command: string, args: string[], cancelToken?: vscode.CancellationToken): Promise<any> {
+    private execute(command: string, args: string[], cancelToken?: vscode.CancellationToken, options: { cwd?: string } = {}): Promise<any> {
         return new Promise((resolve, reject) => {
             let errMsg = '';
             let out = '';
+            let settled = false;
+            let cancelled = false;
 
             this.output.appendLine(`exec ${command} ${args.join(' ')}`);
+            if (options.cwd) {
+                this.output.appendLine(`cwd ${options.cwd}`);
+            }
+
+            const rejectOnce = (err: Error) => {
+                if (!settled) {
+                    settled = true;
+                    reject(err);
+                }
+            };
 
             let p: ReturnType<typeof spawn>;
             try {
-                p = spawn(command, args);
+                p = spawn(command, args, options.cwd ? { cwd: options.cwd } : undefined);
             } catch (err: any) {
-                reject(new Error(`Failed to start process: ${err.message}`));
+                rejectOnce(new Error(`Failed to start process: ${err.message}`));
                 return;
             }
 
             // Handle spawn error (e.g., ENOENT when command doesn't exist)
             p.on('error', (err: Error) => {
                 this.output.appendLine(`Process error: ${err.message}`);
-                reject(new Error(`Failed to execute python: ${err.message}. Make sure Python is installed and selected.`));
+                rejectOnce(new Error(`Failed to execute python: ${err.message}. Make sure Python is installed and selected.`));
             });
 
             if (cancelToken) {
                 cancelToken.onCancellationRequested(() => {
                     this.output.appendLine('cancel command');
+                    cancelled = true;
                     p.kill();
                 });
             }
 
-            p.stdout?.on('data', (data: string) => {
-                this.output.appendLine(data);
-                out = out + data;
+            p.stdout?.on('data', (data: Buffer | string) => {
+                const text = data.toString();
+                this.output.append(text);
+                out = out + text;
             });
 
-            p.stderr?.on('data', (data: string) => {
-                if(!(data.indexOf('WARNING') === 0)) {
-                    this.output.appendLine(data);
-                    errMsg += data;
+            p.stderr?.on('data', (data: Buffer | string) => {
+                const text = data.toString();
+                if(!(text.indexOf('WARNING') === 0)) {
+                    this.output.append(text);
+                    errMsg += text;
                 }
             });
 
-            p.on('close', (code) => {
+            p.on('close', (code, signal) => {
+                if (settled) {
+                    return;
+                }
                 this.output.appendLine('');
-                if (!code) {
+                if (cancelled) {
+                    rejectOnce(new Error('Command cancelled'));
+                } else if (code === 0) {
+                    settled = true;
                     resolve(out);
                 } else {
                     const err = new Error(errMsg || 'Command failed');
-                    (err as Error & { code: number }).code = code;
-                    reject(err);
+                    (err as Error & { code: number | null; signal: NodeJS.Signals | null }).code = code;
+                    (err as Error & { code: number | null; signal: NodeJS.Signals | null }).signal = signal;
+                    rejectOnce(err);
                 }
             });
         });
     }
 
-    private pip(args: string[], cancelToken?: vscode.CancellationToken, showErrorMessage = true) {
+    private pip(args: string[], cancelToken?: vscode.CancellationToken, showErrorMessage = true, cwd?: string) {
+        this.validatePythonPath();
         const python = this.pythonPath;
 
         return this.execute(python, ['-m', 'pip']
             .concat(args)
             .concat([]),
-            cancelToken
+            cancelToken,
+            { cwd }
         ).catch((err) => {
             if (showErrorMessage) {
                 vscode.window.showErrorMessage(err.message);
@@ -163,14 +187,14 @@ export class PackageManager implements IPackageManager {
         });
     }
 
-    private pipWithSource(iargs: string[], cancelToken?: vscode.CancellationToken, showErrorMessage?: boolean) {
+    private pipWithSource(iargs: string[], cancelToken?: vscode.CancellationToken, showErrorMessage?: boolean, cwd?: string) {
         const args = ([] as string[]).concat(iargs);
 
         if (this.source) {
             args.push('-i', this.source);
         }
 
-        return this.pip(args, cancelToken, showErrorMessage);
+        return this.pip(args, cancelToken, showErrorMessage, cwd);
     }
 
     private createPackageInfo(pack: string | PackageInfo): PackageInfo | null {
@@ -264,36 +288,36 @@ export class PackageManager implements IPackageManager {
         return packInfo;
     }
 
-    private async installPackage(iargs: string[], cancelToken?: vscode.CancellationToken) {
+    private async installPackage(iargs: string[], cancelToken?: vscode.CancellationToken, cwd?: string) {
         const args = ['install', '-U'].concat(iargs);
 
-        await this.pipWithSource(args, cancelToken);
+        await this.pipWithSource(args, cancelToken, undefined, cwd);
     }
 
-    public async addPackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken) {
+    public async addPackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken, cwd?: string) {
         const info = this.createPackageInfo(pack);
         if (!info) {
             throw new Error('Invalid Name');
         }
 
         const name = info.toString();
-        await this.installPackage([name], cancelToken);
+        await this.installPackage([name], cancelToken, cwd);
     }
-    public async updatePackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken) {
+    public async updatePackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken, cwd?: string) {
         const info = this.createPackageInfo(pack);
         if (!info) {
             throw new Error('Invalid Name');
         }
 
         const name = info.toString();
-        await this.installPackage(['--upgrade',name], cancelToken);
+        await this.installPackage(['--upgrade',name], cancelToken, cwd);
     }
-    public async addPackageFromFile(filePath: string, cancelToken?: vscode.CancellationToken) {
+    public async addPackageFromFile(filePath: string, cancelToken?: vscode.CancellationToken, cwd?: string) {
         if (!filePath) {
             throw new Error('Invalid Path');
         }
 
-        await this.installPackage(['-r', filePath], cancelToken);
+        await this.installPackage(['-r', filePath], cancelToken, cwd || path.dirname(filePath));
     }
 
     public async removePackage(pack: string | PackageInfo) {

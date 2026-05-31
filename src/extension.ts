@@ -164,20 +164,27 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	commandTool.registerCommand('pydep-pilot.installRequirements', async (e?: vscode.Uri) => {
-		if (!e) {
+		const activeRequirements = vscode.window.activeTextEditor?.document.uri;
+		const resource = e || (
+			activeRequirements && path.basename(activeRequirements.fsPath).toLowerCase() === 'requirements.txt'
+				? activeRequirements
+				: undefined
+		);
+		if (!resource) {
+			vscode.window.showWarningMessage('Open or select a requirements.txt file first.');
 			return;
 		}
-		const filePath = e.fsPath;
+		const filePath = resource.fsPath;
 		if (!filePath) {
 			return;
 		}
 		outputChannel.clear();
-		vscode.window.withProgress({
+		await vscode.window.withProgress({
 			location: vscode.ProgressLocation.Notification,
 			title: i18n.localize('pydep-pilot.tip.addPackageFromFile', 'Installing packages from %0%', path.basename(filePath)),
 			cancellable: true,
 		}, async (progress, cancelToken) => {
-			await pip.addPackageFromFile(filePath, cancelToken);
+			await pip.addPackageFromFile(filePath, cancelToken, path.dirname(filePath));
 			packageWebviewProvider.refresh();
 		});
 	});

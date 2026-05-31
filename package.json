@@ -2,7 +2,7 @@
 	"name": "pydep-pilot",
 	"displayName": "PyDepPilot",
 	"description": "Manage Python dependencies with a modern UI. View installed packages, check for updates, bulk update, and more.",
-	"version": "1.0.3",
+	"version": "1.0.6",
 	"publisher": "DABWorx",
 	"icon": "media/pydeppilot-logo-icon.png",
 	"license": "MIT",
@@ -193,26 +193,34 @@
 		"package": "npm run check-types && node esbuild.js --production"
 	},
 	"devDependencies": {
-		"@types/glob": "^9.0.0",
 		"@types/mocha": "^10.0.10",
-		"@types/node": "^25.0.9",
-		"@types/vscode": "^1.108.1",
-		"@typescript-eslint/eslint-plugin": "^8.53.0",
-		"@typescript-eslint/parser": "^8.53.0",
+		"@types/node": "^25.9.1",
+		"@types/vscode": "1.108.1",
+		"@typescript-eslint/eslint-plugin": "^8.60.0",
+		"@typescript-eslint/parser": "^8.60.0",
 		"@vscode/test-electron": "^2.5.2",
-		"@vscode/vsce": "^3.7.1",
-		"esbuild": "^0.27.2",
+		"@vscode/vsce": "^3.9.1",
+		"esbuild": "^0.27.7",
 		"esbuild-plugin-alias": "^0.2.1",
-		"eslint": "^9.39.2",
-		"glob": "^13.0.0",
-		"mocha": "^11.7.5",
+		"eslint": "^9.39.4",
+		"glob": "^13.0.6",
+		"mocha": "^11.7.6",
 		"npm-run-all": "^4.1.5",
-		"tsc-alias": "^1.8.16",
+		"tsc-alias": "^1.8.17",
 		"typescript": "^5.9.3"
 	},
 	"dependencies": {
-		"@vscode/codicons": "^0.0.44",
-		"axios": "^1.13.2",
+		"@vscode/codicons": "^0.0.45",
+		"axios": "^1.16.1",
 		"reflect-metadata": "^0.2.2"
+	},
+	"overrides": {
+		"@vscode/vsce": {
+			"brace-expansion": "^1.1.15"
+		},
+		"mocha": {
+			"diff": "^8.0.3",
+			"serialize-javascript": "^7.0.5"
+		}
 	}
 }
