@@ -11,5 +11,9 @@
     "pydep-pilot.command.installRequirements": "Install packages from requirements.txt",
     "pydep-pilot.command.searchPackage": "Search PyPI",
     "pydep-pilot.config.customPypiUrl.description": "Custom PyPI mirror URL (leave empty to use official PyPI)",
-    "pydep-pilot.command.pickPackageVersion": "Select Version"
+    "pydep-pilot.command.pickPackageVersion": "Select Version",
+    "pydep-pilot.config.packageManager.description": "Which tool runs package operations. \"auto\" uses uv only for environments that uv created and uv is on PATH; otherwise pip.",
+    "pydep-pilot.config.packageManager.auto": "Use uv for uv-created environments when uv is installed, otherwise pip",
+    "pydep-pilot.config.packageManager.pip": "Always use pip",
+    "pydep-pilot.config.packageManager.uv": "Always use uv (falls back to pip with a warning if uv is not on PATH)"
 }

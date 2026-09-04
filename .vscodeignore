@@ -55,3 +55,6 @@ pnpm-lock.yaml
 .DS_Store
 Thumbs.db
 *.vsix
+
+# Session memory hook data (never ship)
+.remember/**

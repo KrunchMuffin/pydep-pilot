@@ -57,6 +57,13 @@ suite('Extension Pip Test Suite', function () {
 		assert.strictEqual(null, info);
 	});
 
+	test('pip api: active backend is pip or uv', (done) => {
+		(async () => {
+			const backend = await pip.getActiveBackend();
+			assert.strictEqual(true, backend === 'pip' || backend === 'uv');
+		})().then(done).catch(done);
+	});
+
 	test('pip api: list', (done) => {
 		(async () => {
 			const packageList  = await pip.getPackageList();

@@ -79,10 +79,11 @@ Access settings via `File > Preferences > Settings` and search for "PyDepPilot":
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `pydep-pilot.customPypiUrl` | Custom PyPI/simple index URL | `` |
+| `pydep-pilot.packageManager` | `auto`, `pip`, or `uv`. `auto` uses uv for environments uv created when uv is on PATH, otherwise pip | `auto` |
 
 ## Roadmap
 
-- [ ] UV package manager support
+- [x] UV package manager support (`uv pip` backend; project mode with `uv add`/`uv sync` planned)
 - [ ] Poetry support
 - [ ] Virtual environment management
 - [ ] Dependency tree visualization

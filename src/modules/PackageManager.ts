@@ -7,6 +7,7 @@ import * as utils from '@/utils';
 import { createDecorator } from '@/common/ioc/common/instantiation';
 import { IExtensionContext, IOutputChannel } from '@/interface/common';
 import { InstantiationService, ServiceCollection } from '@/common/ioc';
+import { BackendCommand, BackendKind, InstallOptions, PackageBackend, createBackend, isUvManagedEnvironment, pyvenvCfgPathFor } from './PackageBackend';
 
 interface PackageInfo {
     name: string;
@@ -17,6 +18,8 @@ interface PackageInfo {
 export type PackageVersionInfo = Omit<PackageInfo, 'version'> & Required<Pick<PackageInfo, 'version'>>;
 
 const PYPI_DEFAULT = 'https://pypi.org/simple';
+
+type BackendSetting = 'auto' | BackendKind;
 
 export const necessaryPackage = [
     'pip', 'setuptools', 'wheel'
@@ -35,18 +38,24 @@ export interface IPackageManager {
     mergePackageListWithUpdate(packInfo: PackageVersionInfo[], updateInfo: PackageVersionInfo[]): PackageVersionInfo[];
     checkPackageLatestVersion(packageName: string, cancelToken?: vscode.CancellationToken): Promise<string | null>;
     freezePackages(): Promise<string>;
+    getActiveBackend(): Promise<BackendKind>;
 }
 
 export const IPackageManager = createDecorator<IPackageManager>('packageManager');
 
 export class PackageManager implements IPackageManager {
     private source: string = PYPI_DEFAULT;
+    private backendSetting: BackendSetting = 'auto';
+    private uvLookup?: Promise<string | null>;
+    private warnedMissingUv = false;
+    private lastBackendLog?: string;
     constructor(
         private _pythonPath: string,
         @IOutputChannel private readonly output: IOutputChannel,
         @IExtensionContext private readonly context: IExtensionContext,
     ) {
         this.updatePythonSource();
+        this.updateBackendSetting();
         this.context.subscriptions.push(
             vscode.workspace.onDidChangeConfiguration(this.onConfigUpdate.bind(this))
         );
@@ -64,6 +73,18 @@ export class PackageManager implements IPackageManager {
         if (e.affectsConfiguration('pydep-pilot.customPypiUrl')) {
             this.updatePythonSource();
         }
+        if (e.affectsConfiguration('pydep-pilot.packageManager')) {
+            this.updateBackendSetting();
+        }
+    }
+
+    updateBackendSetting() {
+        const config = vscode.workspace.getConfiguration('pydep-pilot');
+        const value = config.get<string>('packageManager', 'auto');
+        this.backendSetting = value === 'pip' || value === 'uv' ? value : 'auto';
+        this.uvLookup = undefined;
+        this.warnedMissingUv = false;
+        this.lastBackendLog = undefined;
     }
 
     updatePythonSource(){
@@ -125,7 +146,7 @@ export class PackageManager implements IPackageManager {
             // Handle spawn error (e.g., ENOENT when command doesn't exist)
             p.on('error', (err: Error) => {
                 this.output.appendLine(`Process error: ${err.message}`);
-                rejectOnce(new Error(`Failed to execute python: ${err.message}. Make sure Python is installed and selected.`));
+                rejectOnce(new Error(`Failed to execute ${command}: ${err.message}. Make sure it is installed and on PATH.`));
             });
 
             if (cancelToken) {
@@ -170,31 +191,100 @@ export class PackageManager implements IPackageManager {
         });
     }
 
-    private pip(args: string[], cancelToken?: vscode.CancellationToken, showErrorMessage = true, cwd?: string) {
+    /** Resolves to the uv command name when uv is on PATH, else null. Cached until settings change. */
+    private findUv(): Promise<string | null> {
+        if (!this.uvLookup) {
+            this.uvLookup = new Promise<string | null>((resolve) => {
+                let p: ReturnType<typeof spawn>;
+                try {
+                    p = spawn('uv', ['--version']);
+                } catch {
+                    resolve(null);
+                    return;
+                }
+                p.on('error', () => resolve(null));
+                p.on('close', (code) => resolve(code === 0 ? 'uv' : null));
+            });
+        }
+        return this.uvLookup;
+    }
+
+    private isUvEnvironment(pythonPath: string): boolean {
+        const cfgPath = pyvenvCfgPathFor(pythonPath);
+        if (!cfgPath) {
+            return false;
+        }
+        try {
+            return isUvManagedEnvironment(fs.readFileSync(cfgPath, 'utf8'));
+        } catch {
+            return false;
+        }
+    }
+
+    /**
+     * Picks pip or uv for the current interpreter. "auto" only chooses uv when uv is
+     * on PATH and the environment itself was created by uv, so pip users are never
+     * switched unexpectedly. Detection failures always resolve to pip.
+     */
+    private async resolveBackend(): Promise<PackageBackend> {
         this.validatePythonPath();
         const python = this.pythonPath;
+        let kind: BackendKind = 'pip';
+        let reason = 'pip selected in settings';
 
-        return this.execute(python, ['-m', 'pip']
-            .concat(args)
-            .concat([]),
-            cancelToken,
-            { cwd }
-        ).catch((err) => {
+        try {
+            if (this.backendSetting !== 'pip') {
+                const uv = await this.findUv();
+                if (this.backendSetting === 'uv') {
+                    if (uv) {
+                        kind = 'uv';
+                        reason = 'uv selected in settings';
+                    } else {
+                        reason = 'uv selected in settings but not found on PATH, falling back to pip';
+                        if (!this.warnedMissingUv) {
+                            this.warnedMissingUv = true;
+                            vscode.window.showWarningMessage('PyDepPilot: "uv" is set as the package manager but was not found on PATH. Falling back to pip.');
+                        }
+                    }
+                } else if (uv && this.isUvEnvironment(python)) {
+                    kind = 'uv';
+                    reason = 'environment was created by uv';
+                } else {
+                    reason = uv ? 'environment was not created by uv' : 'uv not found on PATH';
+                }
+            }
+        } catch {
+            kind = 'pip';
+            reason = 'backend detection failed';
+        }
+
+        const log = `${kind} (${reason}) for ${python}`;
+        if (log !== this.lastBackendLog) {
+            this.lastBackendLog = log;
+            this.output.appendLine(`PyDepPilot backend: ${log}`);
+        }
+        return createBackend(kind, python, 'uv');
+    }
+
+    public async getActiveBackend(): Promise<BackendKind> {
+        try {
+            return (await this.resolveBackend()).kind;
+        } catch {
+            return 'pip';
+        }
+    }
+
+    private async run(build: (backend: PackageBackend) => BackendCommand, cancelToken?: vscode.CancellationToken, showErrorMessage = true, cwd?: string): Promise<any> {
+        // Interpreter validation errors propagate without a popup, as before.
+        const backend = await this.resolveBackend();
+        const { command, args } = build(backend);
+
+        return this.execute(command, args, cancelToken, { cwd }).catch((err) => {
             if (showErrorMessage) {
                 vscode.window.showErrorMessage(err.message);
             }
             return Promise.reject(err);
         });
-    }
-
-    private pipWithSource(iargs: string[], cancelToken?: vscode.CancellationToken, showErrorMessage?: boolean, cwd?: string) {
-        const args = ([] as string[]).concat(iargs);
-
-        if (this.source) {
-            args.push('-i', this.source);
-        }
-
-        return this.pip(args, cancelToken, showErrorMessage, cwd);
     }
 
     private createPackageInfo(pack: string | PackageInfo): PackageInfo | null {
@@ -225,17 +315,17 @@ export class PackageManager implements IPackageManager {
     }
 
     public async getPackageList(): Promise<PackageVersionInfo[]> {
-        const packages = await this.pip(['list', '--format', 'json']);
+        const packages = await this.run(b => b.list());
         return this.tryParsePipListJson(packages);
     }
 
     public async freezePackages(): Promise<string> {
-        const output = await this.pip(['freeze']);
+        const output = await this.run(b => b.freeze());
         return output.trim();
     }
 
     public async getPackageUpdate(): Promise<PackageVersionInfo[]> {
-        const updates = await this.pipWithSource(['list', '--outdated', '--format', 'json']);
+        const updates = await this.run(b => b.outdated(this.source));
         return this.tryParsePipListJson(updates);
     }
 
@@ -288,10 +378,8 @@ export class PackageManager implements IPackageManager {
         return packInfo;
     }
 
-    private async installPackage(iargs: string[], cancelToken?: vscode.CancellationToken, cwd?: string) {
-        const args = ['install', '-U'].concat(iargs);
-
-        await this.pipWithSource(args, cancelToken, undefined, cwd);
+    private async installPackage(specs: string[], options: Omit<InstallOptions, 'indexUrl'>, cancelToken?: vscode.CancellationToken, cwd?: string) {
+        await this.run(b => b.install(specs, { ...options, indexUrl: this.source }), cancelToken, undefined, cwd);
     }
 
     public async addPackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken, cwd?: string) {
@@ -301,7 +389,7 @@ export class PackageManager implements IPackageManager {
         }
 
         const name = info.toString();
-        await this.installPackage([name], cancelToken, cwd);
+        await this.installPackage([name], { upgrade: true }, cancelToken, cwd);
     }
     public async updatePackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken, cwd?: string) {
         const info = this.createPackageInfo(pack);
@@ -310,14 +398,14 @@ export class PackageManager implements IPackageManager {
         }
 
         const name = info.toString();
-        await this.installPackage(['--upgrade',name], cancelToken, cwd);
+        await this.installPackage([name], { upgrade: true }, cancelToken, cwd);
     }
     public async addPackageFromFile(filePath: string, cancelToken?: vscode.CancellationToken, cwd?: string) {
         if (!filePath) {
             throw new Error('Invalid Path');
         }
 
-        await this.installPackage(['-r', filePath], cancelToken, cwd || path.dirname(filePath));
+        await this.installPackage([], { upgrade: true, requirementsFile: filePath }, cancelToken, cwd || path.dirname(filePath));
     }
 
     public async removePackage(pack: string | PackageInfo) {
@@ -331,7 +419,7 @@ export class PackageManager implements IPackageManager {
             return;
         }
 
-        await this.pip(['uninstall', name, '-y']);
+        await this.run(b => b.uninstall(name));
     }
 
     public async getPackageVersionList(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken) {

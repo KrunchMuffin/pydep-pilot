@@ -19,6 +19,9 @@
     /** @type {boolean} */
     let hasRequirements = false;
 
+    /** @type {string} pip or uv, whichever the extension is driving */
+    let backend = '';
+
     /** @type {string|null} */
     let errorMessage = null;
 
@@ -66,6 +69,7 @@
                 const wasEmpty = packages.length === 0;
                 packages = message.data || [];
                 hasRequirements = message.hasRequirements || false;
+                backend = message.backend || '';
                 errorMessage = null;
                 // Only clear selections on fresh load, not incremental updates
                 if (wasEmpty) {
@@ -562,7 +566,7 @@
         ).length;
 
         if (totalCountEl) {
-            totalCountEl.textContent = total + ' package' + (total !== 1 ? 's' : '');
+            totalCountEl.textContent = total + ' package' + (total !== 1 ? 's' : '') + (backend ? ' \u00b7 ' + backend : '');
         }
 
         if (updateAvailableCountEl) {

@@ -2,6 +2,14 @@
 
 All notable changes to PyDepPilot will be documented in this file.
 
+## [1.1.0] - 2026-09-03
+
+### Added
+- uv support: package operations run through `uv pip` for environments created by uv when uv is on PATH. New `pydep-pilot.packageManager` setting (`auto`, `pip`, `uv`). The sidebar footer shows the active backend.
+
+### Changed
+- Dev dependencies updated (eslint 10, mocha 12, esbuild 0.28, @vscode/test-electron 3). Stale npm overrides removed.
+
 ## [1.0.6] - 2026-05-29
 
 ### Changed

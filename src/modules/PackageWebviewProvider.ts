@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { createDecorator, InstantiationService, ServiceCollection } from '@/common/ioc';
 import { IPackageManager, PackageVersionInfo } from './PackageManager';
+import { BackendKind } from './PackageBackend';
 import { IPythonExtension } from './PythonExtension';
 import { IExtensionContext } from '@/interface/common';
 
@@ -26,6 +27,7 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
     private _packages: PackageVersionInfo[] = [];
     private _isLoading: boolean = false;
     private _hasRequirements: boolean = false;
+    private _backend: BackendKind = 'pip';
     private _emptyState?: EnvironmentEmptyState;
     private _allowGlobalPython: boolean = false;
 
@@ -87,7 +89,8 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
             this._postMessage({
                 type: 'packages',
                 data: this._packages,
-                hasRequirements: this._hasRequirements
+                hasRequirements: this._hasRequirements,
+                backend: this._backend
             });
         }
     }
@@ -125,6 +128,7 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
             }
 
             this.pip.updatePythonPath(currentPythonPath);
+            this._backend = await this.pip.getActiveBackend();
 
             // First, get the package list quickly and display it
             this._packages = await this.pip.getPackageList();
@@ -134,7 +138,8 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
             this._postMessage({
                 type: 'packages',
                 data: this._packages,
-                hasRequirements: this._hasRequirements
+                hasRequirements: this._hasRequirements,
+                backend: this._backend
             });
 
             // Mark loading as done for the initial list
@@ -149,7 +154,8 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
                 this._postMessage({
                     type: 'packages',
                     data: this._packages,
-                    hasRequirements: this._hasRequirements
+                    hasRequirements: this._hasRequirements,
+                    backend: this._backend
                 });
             } catch {
                 // Keep the installed package list visible even when update lookup fails.
