@@ -16,7 +16,6 @@ A modern, intuitive Python dependency manager for VS Code. View your installed p
 
 View all your installed Python packages in a clean, modern webview interface with real-time update checking.
 
-<!-- TODO: Add screenshot of main interface -->
 ![Package Dashboard](https://github.com/KrunchMuffin/pydep-pilot/raw/main/doc/img/dashboard.webp)
 
 ### Version Management
@@ -25,14 +24,12 @@ View all your installed Python packages in a clean, modern webview interface wit
 - Visual indicators for outdated packages
 - Click any version to pick a specific version to install
 
-<!-- TODO: Add screenshot showing version columns -->
 ![Version Display](https://github.com/KrunchMuffin/pydep-pilot/raw/main/doc/img/versions.webp)
 
 ### Bulk Update
 
 Select multiple packages and update them all at once. No more updating one by one!
 
-<!-- TODO: Add GIF of bulk update in action -->
 ![Bulk Update](https://github.com/KrunchMuffin/pydep-pilot/raw/main/doc/img/bulk-update.gif)
 
 ### Search PyPI
@@ -94,7 +91,6 @@ Access settings via `File > Preferences > Settings` and search for "PyDepPilot":
 
 ## Roadmap
 
-- [x] UV package manager support (`uv pip` backend; project mode with `uv add`/`uv sync` planned)
 - [ ] Poetry support
 - [ ] Virtual environment management
 - [ ] Dependency tree visualization
