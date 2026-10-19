@@ -109,6 +109,8 @@ Development requires Node.js 22.13 or newer. Run `npm install`, `npm run compile
 
 Dependency updates retain VS Code API types at the minimum supported version (1.108.1) and the stable Codicons release (0.0.45). TypeScript 6 is used because the current typescript-eslint parser does not support TypeScript 7.
 
+Fallow's configuration keeps `@vscode/codicons` because the webview loads its font directly. It also declares `resolveWebviewView` as a framework-invoked method specifically for `IPackageWebviewProvider` implementations. Duplication and complexity checks keep their default thresholds.
+
 [GitHub Repository](https://github.com/KrunchMuffin/pydep-pilot)
 
 ## License

@@ -4,6 +4,7 @@ import * as path from "path";
 import { Event, Uri } from "vscode";
 import { createDecorator, InstantiationService, ServiceCollection } from "@/common/ioc";
 import { IExtensionContext } from "@/interface";
+import { getWorkspaceFolders } from './WorkspaceFolders';
 
 export interface PythonExtensionApi {
     /**
@@ -127,37 +128,11 @@ export class PythonExtension implements IPythonExtension {
      * Checks common venv folder names and returns the Python executable path if found.
      */
     private getWorkspaceFolders(resource?: Uri): vscode.WorkspaceFolder[] {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders?.length) {
-            return [];
-        }
-
-        const hasExplicitResource = !!resource;
-        const activeResource = resource || vscode.window.activeTextEditor?.document.uri;
-        const preferredFolder = activeResource
-            ? vscode.workspace.getWorkspaceFolder(activeResource)
-            : undefined;
-
-        if (!preferredFolder) {
-            return hasExplicitResource ? [] : [...workspaceFolders];
-        }
-
-        if (hasExplicitResource) {
-            return [preferredFolder];
-        }
-
-        return [
-            preferredFolder,
-            ...workspaceFolders.filter(folder => folder.uri.toString() !== preferredFolder.uri.toString())
-        ];
+        return getWorkspaceFolders(resource);
     }
 
     private detectLocalVenv(resource?: Uri): string | null {
         const workspaceFolders = this.getWorkspaceFolders(resource);
-        if (!workspaceFolders.length) {
-            return null;
-        }
-
         const isWindows = process.platform === 'win32';
 
         // Common venv folder names to check
@@ -165,41 +140,38 @@ export class PythonExtension implements IPythonExtension {
         const pythonFolder = isWindows ? 'Scripts' : 'bin';
         const pythonExecutable = isWindows ? 'python.exe' : 'python';
 
-        for (const workspaceFolder of workspaceFolders) {
-            const workspacePath = workspaceFolder.uri.fsPath;
-            for (const venvName of venvNames) {
-                const pythonPath = path.join(workspacePath, venvName, pythonFolder, pythonExecutable);
-                if (fs.existsSync(pythonPath)) {
-                    return pythonPath;
-                }
-            }
-        }
+        const candidates = workspaceFolders.flatMap(folder =>
+            venvNames.map(name => path.join(folder.uri.fsPath, name, pythonFolder, pythonExecutable))
+        );
+        return candidates.find(candidate => fs.existsSync(candidate)) || null;
+    }
 
-        return null;
+    private selectedPythonPath(resource?: Uri): string {
+        const pythonApi = this.pythonExtension?.exports;
+        const execCommand = pythonApi?.settings.getExecutionDetails(resource)?.execCommand;
+        return this.firstExecutionArgument(execCommand);
+    }
+
+    private firstExecutionArgument(command: string[] = []): string {
+        return command[0] || '';
     }
 
     private getPythonExtensionPath(resource?: Uri, options: PythonPathOptions = {}): string {
-        const pythonApi = this.pythonExtension?.exports;
-        const execCommand = pythonApi?.settings.getExecutionDetails(resource)?.execCommand;
-        const pythonPath = execCommand?.[0] || '';
-
-        if (!pythonPath) {
-            return '';
-        }
-
-        if (!resource || !vscode.workspace.workspaceFolders?.length) {
+        const pythonPath = this.selectedPythonPath(resource);
+        if (!resource) {
             return pythonPath;
         }
-
         if (options.allowGlobal) {
             return pythonPath;
         }
+        return this.isWorkspaceInterpreterAllowed(pythonPath, resource) ? pythonPath : '';
+    }
 
-        if (this.isPathInWorkspace(pythonPath, resource)) {
-            return pythonPath;
+    private isWorkspaceInterpreterAllowed(pythonPath: string, resource: Uri): boolean {
+        if (!vscode.workspace.workspaceFolders?.length) {
+            return true;
         }
-
-        return this.hasWorkspaceInterpreterSetting(resource) ? pythonPath : '';
+        return this.isPathInWorkspace(pythonPath, resource) || this.hasWorkspaceInterpreterSetting(resource);
     }
 
     private hasWorkspaceInterpreterSetting(resource: Uri): boolean {
@@ -218,7 +190,7 @@ export class PythonExtension implements IPythonExtension {
         return this.getWorkspaceFolders(resource).some(folder => {
             const relativePath = path.relative(folder.uri.fsPath, pythonPath);
             return relativePath === ''
-                || (!!relativePath && relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`) && !path.isAbsolute(relativePath));
+                || (relativePath !== '..' && !relativePath.startsWith(`..${path.sep}`) && !path.isAbsolute(relativePath));
         });
     }
 

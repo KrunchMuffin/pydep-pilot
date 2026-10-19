@@ -1,0 +1,10 @@
+{
+    // The webview loads codicon.ttf through a VS Code resource URI; there is no JS import.
+    // Keep this dependency: .vscodeignore explicitly includes its font in the VSIX.
+    "ignoreDependencies": ["@vscode/codicons"],
+    // VS Code calls this method on registered webview providers. Limit the rule to
+    // our provider interface so unrelated methods with the same name are still checked.
+    "usedClassMembers": [
+        { "implements": "IPackageWebviewProvider", "members": ["resolveWebviewView"] }
+    ]
+}

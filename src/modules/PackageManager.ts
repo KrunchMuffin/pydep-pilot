@@ -8,12 +8,7 @@ import { createDecorator } from '@/common/ioc/common/instantiation';
 import { IExtensionContext, IOutputChannel } from '@/interface/common';
 import { InstantiationService, ServiceCollection } from '@/common/ioc';
 import { BackendCommand, BackendKind, InstallOptions, PackageBackend, createBackend, isUvManagedEnvironment, pyvenvCfgPathFor } from './PackageBackend';
-
-interface PackageInfo {
-    name: string;
-    version?: string;
-    latestVersion?: string;
-}
+import { PackageInfo, comparePackageVersions, createPackageInfo } from './PackageInfo';
 
 export type PackageVersionInfo = Omit<PackageInfo, 'version'> & Required<Pick<PackageInfo, 'version'>>;
 
@@ -110,9 +105,6 @@ export class PackageManager implements IPackageManager {
 
     private validatePythonPath(): void {
         const pythonPath = this.pythonPath;
-        if (!pythonPath) {
-            throw new Error('No Python interpreter configured. Please select a Python interpreter.');
-        }
         // Only check file existence for full paths (not PATH commands like 'python' or 'python3')
         const isFullPath = path.isAbsolute(pythonPath) || pythonPath.includes(path.sep);
         if (isFullPath && !fs.existsSync(pythonPath)) {
@@ -186,13 +178,14 @@ export class PackageManager implements IPackageManager {
                     settled = true;
                     resolve(out);
                 } else {
-                    const err = new Error(errMsg || 'Command failed');
-                    (err as Error & { code: number | null; signal: NodeJS.Signals | null }).code = code;
-                    (err as Error & { code: number | null; signal: NodeJS.Signals | null }).signal = signal;
-                    rejectOnce(err);
+                    rejectOnce(this.processError(errMsg, code, signal));
                 }
             });
         });
+    }
+
+    private processError(message: string, code: number | null, signal: NodeJS.Signals | null): Error {
+        return Object.assign(new Error(message || 'Command failed'), { code, signal });
     }
 
     /** Resolve the configured executable without letting a broken uv process hang the sidebar. */
@@ -228,41 +221,50 @@ export class PackageManager implements IPackageManager {
     private async resolveBackend(): Promise<PackageBackend> {
         this.validatePythonPath();
         const python = this.pythonPath;
-        let kind: BackendKind = 'pip';
-        let reason = 'pip selected in settings';
-
+        let selection: { kind: BackendKind; reason: string };
         try {
-            if (this.backendSetting !== 'pip') {
-                const uv = await this.findUv();
-                if (this.backendSetting === 'uv') {
-                    if (uv) {
-                        kind = 'uv';
-                        reason = 'uv selected in settings';
-                    } else {
-                        reason = 'configured uv executable is unavailable, falling back to pip';
-                        if (!this.warnedMissingUv) {
-                            this.warnedMissingUv = true;
-                            vscode.window.showWarningMessage('PyDepPilot: uv could not be started. Check pydep-pilot.uvPath or install uv and refresh. Falling back to pip.');
-                        }
-                    }
-                } else if (uv && this.isUvEnvironment(python)) {
-                    kind = 'uv';
-                    reason = 'environment was created by uv';
-                } else {
-                    reason = uv ? 'environment was not created by uv' : 'uv is unavailable';
-                }
-            }
+            selection = await this.selectBackend(python);
         } catch {
-            kind = 'pip';
-            reason = 'backend detection failed';
+            selection = { kind: 'pip', reason: 'backend detection failed' };
         }
-
+        const { kind, reason } = selection;
         const log = `${kind} (${reason}) for ${python}`;
         if (log !== this.lastBackendLog) {
             this.lastBackendLog = log;
             this.output.appendLine(`PyDepPilot backend: ${log}`);
         }
         return createBackend(kind, python, this.uvPath);
+    }
+
+    private async selectBackend(python: string): Promise<{ kind: BackendKind; reason: string }> {
+        if (this.backendSetting === 'pip') {
+            return { kind: 'pip', reason: 'pip selected in settings' };
+        }
+        const uv = await this.findUv();
+        if (!uv) {
+            return this.missingUvBackend();
+        }
+        if (this.backendSetting === 'uv') {
+            return { kind: 'uv', reason: 'uv selected in settings' };
+        }
+        return this.environmentBackend(python);
+    }
+
+    private environmentBackend(python: string): { kind: BackendKind; reason: string } {
+        return this.isUvEnvironment(python)
+            ? { kind: 'uv', reason: 'environment was created by uv' }
+            : { kind: 'pip', reason: 'environment was not created by uv' };
+    }
+
+    private missingUvBackend(): { kind: BackendKind; reason: string } {
+        if (this.backendSetting !== 'uv') {
+            return { kind: 'pip', reason: 'uv is unavailable' };
+        }
+        if (!this.warnedMissingUv) {
+            this.warnedMissingUv = true;
+            vscode.window.showWarningMessage('PyDepPilot: uv could not be started. Check pydep-pilot.uvPath or install uv and refresh. Falling back to pip.');
+        }
+        return { kind: 'pip', reason: 'configured uv executable is unavailable, falling back to pip' };
     }
 
     public async getActiveBackend(): Promise<BackendKind> {
@@ -285,25 +287,6 @@ export class PackageManager implements IPackageManager {
             return Promise.reject(err);
         });
     }
-
-    private createPackageInfo(pack: string | PackageInfo): PackageInfo | null {
-        let out: PackageInfo;
-        if (typeof pack === 'string') {
-            const [name, version] = pack.split('==');
-            out = { name, version: version || undefined };
-        }else{
-            out = {...pack};
-        }
-        if(!out.name){
-            return null;
-        }
-        out.toString = ()=>{
-            return `${out.name}${out.version ? `==${out.version}` : ''}`;
-        };
-        return out;
-    }
-
-    public _test_createPackageInfo = this.createPackageInfo;
 
     private parsePackageList(packages: string): PackageVersionInfo[] {
         try {
@@ -386,16 +369,10 @@ export class PackageManager implements IPackageManager {
     }
 
     public async addPackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken, cwd?: string) {
-        const info = this.createPackageInfo(pack);
-        if (!info) {
-            throw new Error('Invalid Name');
-        }
-
-        const name = info.toString();
-        await this.installPackage([name], { upgrade: true }, cancelToken, cwd);
+        await this.updatePackage(pack, cancelToken, cwd);
     }
     public async updatePackage(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken, cwd?: string) {
-        const info = this.createPackageInfo(pack);
+        const info = createPackageInfo(pack);
         if (!info) {
             throw new Error('Invalid Name');
         }
@@ -412,7 +389,7 @@ export class PackageManager implements IPackageManager {
     }
 
     public async removePackage(pack: string | PackageInfo) {
-        const info = this.createPackageInfo(pack);
+        const info = createPackageInfo(pack);
 
         if (!info) {
             throw new Error('Invalid Name');
@@ -426,7 +403,7 @@ export class PackageManager implements IPackageManager {
     }
 
     public async getPackageVersionList(pack: string | PackageInfo, cancelToken?: vscode.CancellationToken) {
-        const info = this.createPackageInfo(pack);
+        const info = createPackageInfo(pack);
 
         if (!info) {
             throw new Error('Invalid Name');
@@ -443,31 +420,17 @@ export class PackageManager implements IPackageManager {
             });
 
             // Get all versions from the releases object keys
-            const releases = resp.data?.releases || {};
-            const versionList = Object.keys(releases)
-                .filter(version => {
-                    // Filter out versions with no files (yanked/empty releases)
-                    const files = releases[version];
-                    return Array.isArray(files) && files.length > 0;
-                })
-                .sort((a, b) => {
-                    // Sort versions in descending order (newest first)
-                    // Simple version comparison - split by . and compare parts
-                    const partsA = a.split('.').map(p => parseInt(p.replace(/[^0-9]/g, '')) || 0);
-                    const partsB = b.split('.').map(p => parseInt(p.replace(/[^0-9]/g, '')) || 0);
-                    for (let i = 0; i < Math.max(partsA.length, partsB.length); i++) {
-                        const diff = (partsB[i] || 0) - (partsA[i] || 0);
-                        if (diff !== 0) {
-                            return diff;
-                        }
-                    }
-                    return 0;
-                });
-
-            return versionList;
+            return this.releaseVersions(resp.data?.releases);
         } catch (err) {
             // Fallback: return empty array if PyPI API fails
             return [];
         }
+    }
+
+    private releaseVersions(releases?: Record<string, unknown> | null): string[] {
+        const available = releases || {};
+        return Object.keys(available)
+            .filter(version => Array.isArray(available[version]) && available[version].length > 0)
+            .sort(comparePackageVersions);
     }
 }

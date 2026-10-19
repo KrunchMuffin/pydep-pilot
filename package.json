@@ -211,7 +211,7 @@
 		"compile-tests": "npm run check-types && node esbuild.js --tests",
 		"pretest": "npm run compile && npm run compile-tests && npm run lint",
 		"test": "node out/test/runTest.js",
-		"test:unit": "npm run compile-tests && mocha --ui tdd out/test/suite/backend.test.js out/test/suite/i18n.test.js",
+		"test:unit": "npm run compile-tests && mocha --ui tdd out/test/suite/backend.test.js out/test/suite/i18n.test.js out/test/suite/pip.test.js out/test/suite/workspace.test.js",
 		"pack": "vsce package",
 		"deploy": "vsce publish",
 		"watch": "npm-run-all -p watch:*",

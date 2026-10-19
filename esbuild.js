@@ -59,6 +59,7 @@ const esbuildProblemMatcherPlugin = {
 async function main() {
   if (tests) {
     await esbuild.build({
+      tsconfig: 'tsconfig.json',
       entryPoints: [
         'src/test/runTest.ts',
         'src/test/suite/index.ts',

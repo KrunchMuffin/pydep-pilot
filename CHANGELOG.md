@@ -5,6 +5,8 @@ All notable changes to PyDepPilot will be documented in this file.
 ## [Unreleased]
 
 ### Changed
+- Consolidate package installation and workspace selection; simplify backend selection, sidebar loading, message dispatch, and requirements export.
+- Replace the production test hook with a directly tested package parser and document Fallow's VS Code lifecycle and font-asset exceptions.
 - Update compatible development dependencies and the transitive lockfile; remove unused alias and metadata packages.
 - Migrate TypeScript configuration to modern module resolution and restore lint, test, and VSIX packaging commands.
 
