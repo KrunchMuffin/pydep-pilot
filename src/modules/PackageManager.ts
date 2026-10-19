@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { execFile, spawn } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
@@ -46,6 +46,7 @@ export const IPackageManager = createDecorator<IPackageManager>('packageManager'
 export class PackageManager implements IPackageManager {
     private source: string = PYPI_DEFAULT;
     private backendSetting: BackendSetting = 'auto';
+    private uvPath = 'uv';
     private uvLookup?: Promise<string | null>;
     private warnedMissingUv = false;
     private lastBackendLog?: string;
@@ -73,7 +74,7 @@ export class PackageManager implements IPackageManager {
         if (e.affectsConfiguration('pydep-pilot.customPypiUrl')) {
             this.updatePythonSource();
         }
-        if (e.affectsConfiguration('pydep-pilot.packageManager')) {
+        if (e.affectsConfiguration('pydep-pilot.packageManager') || e.affectsConfiguration('pydep-pilot.uvPath')) {
             this.updateBackendSetting();
         }
     }
@@ -82,6 +83,7 @@ export class PackageManager implements IPackageManager {
         const config = vscode.workspace.getConfiguration('pydep-pilot');
         const value = config.get<string>('packageManager', 'auto');
         this.backendSetting = value === 'pip' || value === 'uv' ? value : 'auto';
+        this.uvPath = config.get<string>('uvPath', 'uv').trim() || 'uv';
         this.uvLookup = undefined;
         this.warnedMissingUv = false;
         this.lastBackendLog = undefined;
@@ -95,6 +97,8 @@ export class PackageManager implements IPackageManager {
 
     updatePythonPath(path: string) {
         this._pythonPath = path;
+        // Refresh also retries detection after uv is installed or replaced.
+        this.uvLookup = undefined;
     }
 
     private get pythonPath() {
@@ -137,7 +141,7 @@ export class PackageManager implements IPackageManager {
 
             let p: ReturnType<typeof spawn>;
             try {
-                p = spawn(command, args, options.cwd ? { cwd: options.cwd } : undefined);
+                p = spawn(command, args, { cwd: options.cwd, windowsHide: true });
             } catch (err: any) {
                 rejectOnce(new Error(`Failed to start process: ${err.message}`));
                 return;
@@ -191,19 +195,14 @@ export class PackageManager implements IPackageManager {
         });
     }
 
-    /** Resolves to the uv command name when uv is on PATH, else null. Cached until settings change. */
+    /** Resolve the configured executable without letting a broken uv process hang the sidebar. */
     private findUv(): Promise<string | null> {
         if (!this.uvLookup) {
             this.uvLookup = new Promise<string | null>((resolve) => {
-                let p: ReturnType<typeof spawn>;
-                try {
-                    p = spawn('uv', ['--version']);
-                } catch {
-                    resolve(null);
-                    return;
-                }
-                p.on('error', () => resolve(null));
-                p.on('close', (code) => resolve(code === 0 ? 'uv' : null));
+                const uvPath = this.uvPath;
+                execFile(uvPath, ['--version'], { timeout: 5000, windowsHide: true }, (error) => {
+                    resolve(error ? null : uvPath);
+                });
             });
         }
         return this.uvLookup;
@@ -223,7 +222,7 @@ export class PackageManager implements IPackageManager {
 
     /**
      * Picks pip or uv for the current interpreter. "auto" only chooses uv when uv is
-     * on PATH and the environment itself was created by uv, so pip users are never
+     * available and the environment itself was created by uv, so pip users are never
      * switched unexpectedly. Detection failures always resolve to pip.
      */
     private async resolveBackend(): Promise<PackageBackend> {
@@ -240,17 +239,17 @@ export class PackageManager implements IPackageManager {
                         kind = 'uv';
                         reason = 'uv selected in settings';
                     } else {
-                        reason = 'uv selected in settings but not found on PATH, falling back to pip';
+                        reason = 'configured uv executable is unavailable, falling back to pip';
                         if (!this.warnedMissingUv) {
                             this.warnedMissingUv = true;
-                            vscode.window.showWarningMessage('PyDepPilot: "uv" is set as the package manager but was not found on PATH. Falling back to pip.');
+                            vscode.window.showWarningMessage('PyDepPilot: uv could not be started. Check pydep-pilot.uvPath or install uv and refresh. Falling back to pip.');
                         }
                     }
                 } else if (uv && this.isUvEnvironment(python)) {
                     kind = 'uv';
                     reason = 'environment was created by uv';
                 } else {
-                    reason = uv ? 'environment was not created by uv' : 'uv not found on PATH';
+                    reason = uv ? 'environment was not created by uv' : 'uv is unavailable';
                 }
             }
         } catch {
@@ -263,7 +262,7 @@ export class PackageManager implements IPackageManager {
             this.lastBackendLog = log;
             this.output.appendLine(`PyDepPilot backend: ${log}`);
         }
-        return createBackend(kind, python, 'uv');
+        return createBackend(kind, python, this.uvPath);
     }
 
     public async getActiveBackend(): Promise<BackendKind> {
@@ -306,17 +305,21 @@ export class PackageManager implements IPackageManager {
 
     public _test_createPackageInfo = this.createPackageInfo;
 
-    private tryParsePipListJson(packages: string) {
+    private parsePackageList(packages: string): PackageVersionInfo[] {
         try {
-            return JSON.parse(packages.replace(/\n/g, ""));
+            const parsed: unknown = JSON.parse(packages);
+            if (!Array.isArray(parsed)) {
+                throw new Error('Expected a package array');
+            }
+            return parsed;
         } catch(e) {
-            throw new Error(`Get package failed, please run "pip list --format json" or "pip3 list --format json" check pip support json format: ${e}`);
+            throw new Error(`The package manager returned an invalid package list. See the PyDepPilot output channel for details: ${e}`);
         }
     }
 
     public async getPackageList(): Promise<PackageVersionInfo[]> {
         const packages = await this.run(b => b.list());
-        return this.tryParsePipListJson(packages);
+        return this.parsePackageList(packages);
     }
 
     public async freezePackages(): Promise<string> {
@@ -326,7 +329,7 @@ export class PackageManager implements IPackageManager {
 
     public async getPackageUpdate(): Promise<PackageVersionInfo[]> {
         const updates = await this.run(b => b.outdated(this.source));
-        return this.tryParsePipListJson(updates);
+        return this.parsePackageList(updates);
     }
 
     /**

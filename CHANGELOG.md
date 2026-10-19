@@ -2,6 +2,17 @@
 
 All notable changes to PyDepPilot will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- Update compatible development dependencies and the transitive lockfile; remove unused alias and metadata packages.
+- Migrate TypeScript configuration to modern module resolution and restore lint, test, and VSIX packaging commands.
+
+### Fixed
+- Support a custom uv executable path, bound uv detection to five seconds, and retry detection on refresh.
+- Refresh the sidebar when package manager settings change and preserve useful package-operation errors.
+- Verify uv operations in isolated environments without pip, including custom indexes, updates, version selection, requirements import/export, removal, and backend fallback.
+
 ## [1.1.0] - 2026-09-03
 
 ### Added

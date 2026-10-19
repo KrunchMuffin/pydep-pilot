@@ -2,61 +2,16 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 
 suite('Extension Test Suite', function () {
-	this.timeout(10000);
-	vscode.window.showInformationMessage('Start all tests.');
-	const timers: NodeJS.Timeout[] = [];
+	this.timeout(30000);
 
-	test('pydep-pilot ready', (done) => {
-		(async () => {
-			await new Promise((resolve) => {
-				const checkPyDepPilot = () => {
-					const pyDepPilot = vscode.extensions.getExtension('KrunchMuffin.pydep-pilot');
-					if (pyDepPilot && pyDepPilot.isActive) {
-						resolve(undefined);
-					}
-				};
-				checkPyDepPilot();
-				const timer = setInterval(() => {
-					checkPyDepPilot();
-				}, 400);
-				timers.push(timer);
-			});
-		})().then(done).catch(done);
-	});
-
-	test('refreshPackage', (done) => {
-		(async () => {
-			await vscode.commands.executeCommand('pydep-pilot.refreshPackage');
-		})().then(done).catch(done);
-	});
-
-	test('addPackage', (done) => {
-		(async () => {
-			await vscode.commands.executeCommand('pydep-pilot.addPackage', 'pyserial');
-		})().then(done).catch(done);
-	});
-	test('removePackage', (done) => {
-		(async () => {
-			assert.strictEqual(false, await vscode.commands.executeCommand('pydep-pilot.removePackage', { name: 'pip' }));
-			assert.strictEqual(true, await vscode.commands.executeCommand('pydep-pilot.removePackage', { name: 'pyserial' }));
-		})().then(done).catch(done);
-	});
-
-	test('addPackage again', (done) => {
-		(async () => {
-			await vscode.commands.executeCommand('pydep-pilot.addPackage', 'pyserial');
-		})().then(done).catch(done);
-	});
-	test('copyPackageName', (done) => {
-		(async () => {
-			await vscode.commands.executeCommand('pydep-pilot.copyPackageName', { name: 'pyserial' });
-			assert.strictEqual('pyserial', await vscode.env.clipboard.readText());
-		})().then(done).catch(done);
-	});
-
-	suiteTeardown(() => {
-		timers.forEach((timer) => {
-			clearInterval(timer);
-		});
+	test('activates and registers package commands', async () => {
+		const extension = vscode.extensions.getExtension('DABWorx.pydep-pilot');
+		assert.ok(extension);
+		await extension.activate();
+		assert.ok(extension.isActive);
+		const commands = await vscode.commands.getCommands(true);
+		for (const command of ['addPackage', 'removePackage', 'updatePackage', 'refreshPackage', 'installRequirements', 'pickPackageVersion']) {
+			assert.ok(commands.includes(`pydep-pilot.${command}`), command);
+		}
 	});
 });

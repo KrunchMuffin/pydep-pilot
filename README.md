@@ -56,7 +56,7 @@ Generate a `requirements.txt` file from your currently installed packages with o
 ## Requirements
 
 - [Python extension for VS Code](https://marketplace.visualstudio.com/items?itemName=ms-python.python) (ms-python.python)
-- Python with pip installed
+- Python with pip installed, or [uv](https://docs.astral.sh/uv/getting-started/installation/) for the uv backend (pip is not required in uv environments)
 
 ## Installation
 
@@ -72,6 +72,16 @@ Generate a `requirements.txt` file from your currently installed packages with o
 
 PyDepPilot prefers a project-local virtual environment such as `.venv`, `venv`, `.env`, or `env`. If no local environment is found, it uses a workspace-scoped interpreter selected through the Python extension. In folders that do not look like Python projects, PyDepPilot shows that state and lets you explicitly choose the selected global interpreter if you want to inspect global packages.
 
+### Using uv
+
+Create an environment with `uv venv`, then open the PyDepPilot sidebar. The default `auto` setting detects uv-created environments and uses `uv pip` when uv is available. The sidebar footer shows which backend is active.
+
+To use uv with an existing Python environment, set `pydep-pilot.packageManager` to `uv`. Install, update, version selection, uninstall, update checks, requirements import, and requirements export all use the selected interpreter through uv's `--python` option. See [uv's environment documentation](https://docs.astral.sh/uv/pip/environments/) for details.
+
+If VS Code cannot find uv, set `pydep-pilot.uvPath` in User Settings to the full executable path (without quotes or arguments). For remote workspaces, set it in Remote Settings on the host running Python. Refresh retries uv detection. If uv is unavailable, PyDepPilot falls back to pip and warns when uv was explicitly selected; that fallback requires pip in the environment.
+
+These operations manage installed packages only. They do not update `pyproject.toml` or `uv.lock`; project commands such as `uv add` and `uv sync` remain outside this backend.
+
 ## Configuration
 
 Access settings via `File > Preferences > Settings` and search for "PyDepPilot":
@@ -79,7 +89,8 @@ Access settings via `File > Preferences > Settings` and search for "PyDepPilot":
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `pydep-pilot.customPypiUrl` | Custom PyPI/simple index URL | `` |
-| `pydep-pilot.packageManager` | `auto`, `pip`, or `uv`. `auto` uses uv for environments uv created when uv is on PATH, otherwise pip | `auto` |
+| `pydep-pilot.packageManager` | `auto`, `pip`, or `uv`. `auto` uses uv for environments uv created when uv is available, otherwise pip | `auto` |
+| `pydep-pilot.uvPath` | uv executable name or full path, configured in User or Remote Settings | `uv` |
 
 ## Roadmap
 
@@ -91,6 +102,12 @@ Access settings via `File > Preferences > Settings` and search for "PyDepPilot":
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+Development requires Node.js 22.13 or newer. Run `npm install`, `npm run compile`, and `npm run lint`. `npm run pack` produces a VSIX for local installation.
+
+`npm run test:unit` runs the backend command and localization tests. `npm test` builds and lints the extension, then runs tests in an isolated VS Code extension host. Install uv and Python first. The runner creates temporary environments and serves local test wheels, so package operations do not touch your own environments or depend on PyPI. The first run may download VS Code and the Python extension. Set `VSCODE_TEST_VERSION` to test another VS Code version, `VSCODE_EXECUTABLE_PATH` to use a local copy, or `PYDEP_TEST_UV` to use a specific uv executable.
+
+Dependency updates retain VS Code API types at the minimum supported version (1.108.1) and the stable Codicons release (0.0.45). TypeScript 6 is used because the current typescript-eslint parser does not support TypeScript 7.
 
 [GitHub Repository](https://github.com/KrunchMuffin/pydep-pilot)
 

@@ -58,3 +58,4 @@ Thumbs.db
 
 # Session memory hook data (never ship)
 .remember/**
+.fallow/**

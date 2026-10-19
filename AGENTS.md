@@ -11,14 +11,17 @@ npm install
 # Compile TypeScript (one-time)
 npm run compile
 
-# Watch mode for development (runs tsc and tsc-alias in parallel)
+# Watch mode for development (runs tsc and esbuild in parallel)
 npm run watch
 
 # Lint the codebase
 npm run lint
 
-# Run tests (requires compile first)
-npm run pretest && npm test
+# Run extension-host tests (builds and lints first; requires uv and Python)
+npm test
+
+# Run standalone backend and localization tests
+npm run test:unit
 
 # Package the extension
 npm run pack
@@ -29,11 +32,11 @@ npm run deploy
 
 ## Testing
 
-Tests run in VS Code's extension host environment. Use the VS Code debugger with "Extension Tests" configuration to run/debug tests. Test files are in `src/test/suite/`.
+Tests run in VS Code's extension host environment with disposable environments and a local wheel index. `npm test` prepares the fixtures. Use the VS Code debugger with "Extension Tests" configuration to run/debug non-mutating tests; uv integration tests skip without the isolated runner. Test files are in `src/test/suite/`.
 
 ## Architecture Overview
 
-This is a VS Code extension for managing Python packages via pip. It requires the ms-python.python extension as a dependency.
+This is a VS Code extension for managing Python packages via pip or uv pip. It requires the ms-python.python extension as a dependency.
 
 ### Dependency Injection System
 
@@ -59,18 +62,19 @@ export class MyService implements IMyService {
 
 ### Core Modules (`src/modules/`)
 
-- **PackageManager**: Executes pip commands (list, install, uninstall, search), parses PyPI for package search, handles source mirror configuration
-- **PackageDataProvider**: TreeDataProvider for the sidebar package list view, merges package info with update availability
+- **PackageBackend**: Builds pip and uv pip commands targeting the selected Python interpreter
+- **PackageManager**: Selects the backend, executes package operations, queries PyPI, and handles source mirror configuration
+- **PackageWebviewProvider**: Provides the sidebar package dashboard and merges package info with update availability
 - **PythonExtension**: Interfaces with ms-python.python extension to get/watch the active Python interpreter path
 - **CommandTool**: Utility for registering VS Code commands with empty placeholder support during initialization
 
 ### Internationalization
 
-i18n is handled via `src/common/i18n/`. Translations are in `zh-cn.ts`. The `i18n.localize()` function uses placeholder syntax like `%0%`, `%1%` for string interpolation.
+i18n is handled via `src/common/i18n/` with English defaults. Manifest strings are in `package.nls.json`. The `i18n.localize()` function uses placeholder syntax like `%0%`, `%1%` for string interpolation.
 
 ### Path Aliases
 
-TypeScript path alias `@/*` maps to `src/*`. The `tsc-alias` package resolves these during compilation.
+TypeScript path alias `@/*` maps to `src/*`. esbuild resolves these when bundling the extension and tests.
 
 ### Extension Entry Point
 

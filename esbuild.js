@@ -4,6 +4,7 @@ const fs = require('fs');
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
+const tests = process.argv.includes('--tests');
 
 // Custom plugin to resolve @/ path aliases
 const aliasPlugin = {
@@ -56,6 +57,28 @@ const esbuildProblemMatcherPlugin = {
 };
 
 async function main() {
+  if (tests) {
+    await esbuild.build({
+      entryPoints: [
+        'src/test/runTest.ts',
+        'src/test/suite/index.ts',
+        ...fs.readdirSync('src/test/suite')
+          .filter(name => name.endsWith('.test.ts'))
+          .map(name => `src/test/suite/${name}`)
+      ],
+      outbase: 'src',
+      outdir: 'out',
+      bundle: true,
+      packages: 'external',
+      external: ['vscode'],
+      platform: 'node',
+      format: 'cjs',
+      target: 'node22',
+      sourcemap: true,
+      plugins: [aliasPlugin]
+    });
+    return;
+  }
   const ctx = await esbuild.context({
     entryPoints: ['src/extension.ts'],
     bundle: true,
@@ -64,6 +87,7 @@ async function main() {
     sourcemap: !production,
     sourcesContent: false,
     platform: 'node',
+    target: 'node22',
     outfile: 'out/extension.js',
     external: ['vscode'],
     logLevel: 'warning',

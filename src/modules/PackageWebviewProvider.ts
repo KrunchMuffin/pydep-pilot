@@ -35,7 +35,15 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
         @IPackageManager private readonly pip: IPackageManager,
         @IPythonExtension private readonly pythonExt: IPythonExtension,
         @IExtensionContext private readonly context: IExtensionContext
-    ) {}
+    ) {
+        this.context.subscriptions.push(vscode.workspace.onDidChangeConfiguration(event => {
+            if (event.affectsConfiguration('pydep-pilot.packageManager')
+                || event.affectsConfiguration('pydep-pilot.uvPath')
+                || event.affectsConfiguration('pydep-pilot.customPypiUrl')) {
+                this.refresh();
+            }
+        }));
+    }
 
     static Create(instantiation: InstantiationService, service?: ServiceCollection) {
         const instance = instantiation.createInstance<IPackageWebviewProvider>(PackageWebviewProvider);
@@ -146,7 +154,7 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
             this._isLoading = false;
             this._postMessage({ type: 'loading', value: false });
 
-            // Now check update metadata once through pip so we respect the configured package index.
+            // Check updates through the active backend and configured package index.
             this._postMessage({ type: 'checkingUpdates', value: true });
             try {
                 const updateInfo = await this.pip.getPackageUpdate();
@@ -164,13 +172,10 @@ export class PackageWebviewProvider implements IPackageWebviewProvider {
             this._postMessage({ type: 'checkingUpdates', value: false });
         } catch (error: any) {
             const errorMessage = error?.message || String(error);
-            const lowerError = errorMessage.toLowerCase();
             this._emptyState = undefined;
             this._postMessage({
                 type: 'error',
-                message: lowerError.includes('python') || lowerError.includes('pip') || lowerError.includes('interpreter')
-                    ? 'No Python interpreter selected. Please select a Python interpreter using the Python extension.'
-                    : `Failed to load packages: ${errorMessage}`
+                message: `Failed to load packages: ${errorMessage}`
             });
             this._isLoading = false;
             this._postMessage({ type: 'loading', value: false });

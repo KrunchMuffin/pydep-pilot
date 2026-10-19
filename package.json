@@ -191,6 +191,12 @@
 						"%pydep-pilot.config.packageManager.uv%"
 					],
 					"description": "%pydep-pilot.config.packageManager.description%"
+				},
+				"pydep-pilot.uvPath": {
+					"type": "string",
+					"default": "uv",
+					"scope": "machine",
+					"description": "%pydep-pilot.config.uvPath.description%"
 				}
 			}
 		}
@@ -201,6 +207,13 @@
 	"scripts": {
 		"compile": "npm run check-types && node esbuild.js",
 		"check-types": "tsc --noEmit",
+		"lint": "eslint src",
+		"compile-tests": "npm run check-types && node esbuild.js --tests",
+		"pretest": "npm run compile && npm run compile-tests && npm run lint",
+		"test": "node out/test/runTest.js",
+		"test:unit": "npm run compile-tests && mocha --ui tdd out/test/suite/backend.test.js out/test/suite/i18n.test.js",
+		"pack": "vsce package",
+		"deploy": "vsce publish",
 		"watch": "npm-run-all -p watch:*",
 		"watch:esbuild": "node esbuild.js --watch",
 		"watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
@@ -209,24 +222,21 @@
 	},
 	"devDependencies": {
 		"@types/mocha": "^10.0.10",
-		"@types/node": "^25.9.5",
+		"@types/node": "^26.6.5",
 		"@types/vscode": "1.108.1",
-		"@typescript-eslint/eslint-plugin": "^8.69.0",
-		"@typescript-eslint/parser": "^8.69.0",
+		"@typescript-eslint/eslint-plugin": "^8.71.2",
+		"@typescript-eslint/parser": "^8.71.2",
 		"@vscode/test-electron": "^3.1.0",
-		"@vscode/vsce": "^3.9.2",
+		"@vscode/vsce": "^4.0.0",
 		"esbuild": "^0.28.2",
-		"esbuild-plugin-alias": "^0.2.1",
-		"eslint": "^10.9.1",
+		"eslint": "^10.13.0",
 		"glob": "^13.0.6",
-		"mocha": "^12.0.0",
+		"mocha": "^12.0.3",
 		"npm-run-all": "^4.1.5",
-		"tsc-alias": "^1.9.4",
-		"typescript": "^5.9.3"
+		"typescript": "^6.0.3"
 	},
 	"dependencies": {
 		"@vscode/codicons": "^0.0.45",
-		"axios": "^1.20.0",
-		"reflect-metadata": "^0.2.2"
+		"axios": "^1.20.0"
 	}
 }

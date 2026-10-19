@@ -3,7 +3,8 @@ import * as path from 'path';
 import { createBackend, isUvManagedEnvironment, pyvenvCfgPathFor } from '@/modules/PackageBackend';
 
 suite('Package Backend Test Suite', () => {
-	const py = String.raw`C:\proj\.venv\Scripts\python.exe`;
+	const envRoot = path.resolve('project with spaces', '.venv');
+	const py = path.join(envRoot, process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'python.exe' : 'python');
 
 	test('pip backend runs python -m pip', () => {
 		const b = createBackend('pip', py);
@@ -61,12 +62,20 @@ suite('Package Backend Test Suite', () => {
 	test('pyvenv.cfg path is two levels above the interpreter', () => {
 		assert.strictEqual(
 			pyvenvCfgPathFor(py),
-			path.join(String.raw`C:\proj\.venv`, 'pyvenv.cfg')
+			path.join(envRoot, 'pyvenv.cfg')
 		);
 		assert.strictEqual(
 			pyvenvCfgPathFor('/home/u/proj/.venv/bin/python'),
 			path.join('/home/u/proj/.venv', 'pyvenv.cfg')
 		);
 		assert.strictEqual(pyvenvCfgPathFor('python'), null);
+	});
+
+	test('custom uv executable and spaced paths remain separate arguments', () => {
+		const executable = path.resolve('tools with spaces', 'uv');
+		const requirements = path.resolve('project with spaces', 'requirements.txt');
+		const command = createBackend('uv', py, executable).install([], { requirementsFile: requirements });
+		assert.strictEqual(command.command, executable);
+		assert.deepStrictEqual(command.args, ['pip', 'install', '-r', requirements, '--python', py]);
 	});
 });
